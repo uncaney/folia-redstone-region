@@ -44,7 +44,7 @@ public final class TestPluginMain extends JavaPlugin {
         report.add(installCheckCase());
 
         List<Contraption> all = Contraptions.all();
-        AtomicInteger remaining = new AtomicInteger(all.size() + 3); // +1 for perf, +1 for persistence, +1 for stress
+        AtomicInteger remaining = new AtomicInteger(all.size() + 4); // +perf +persistence +stress +cross-region
 
         for (int i = 0; i < all.size(); i++) {
             int laneIndex = i;
@@ -81,6 +81,13 @@ public final class TestPluginMain extends JavaPlugin {
         // Stress (long activity, watch for thread-safety errors).
         new StressRunner(this, w).run().whenComplete((rc, err) -> {
             handleResult(report, "stress-600t", rc, err);
+            maybeFinalize.run();
+        });
+
+        // Cross-region stress: two AC zones in DIFFERENT Folia regions, ticking
+        // simultaneously — exercises the per-thread WireHandler thread-safety design.
+        new CrossRegionStressRunner(this, w).run().whenComplete((rc, err) -> {
+            handleResult(report, "cross-region-stress", rc, err);
             maybeFinalize.run();
         });
     }
