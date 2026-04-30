@@ -1,0 +1,30 @@
+# Folia 1.21.11 server runner — used by parity + perf tests
+FROM eclipse-temurin:21-jdk-alpine
+
+ARG FOLIA_BUILD_URL
+ARG FOLIA_JAR_NAME=folia.jar
+
+WORKDIR /server
+
+# Stage 0 — accept EULA, ship default ops/whitelist (empty), and minimal server.properties
+RUN echo "eula=true" > eula.txt \
+ && echo "online-mode=false"        >  server.properties \
+ && echo "level-type=flat"          >> server.properties \
+ && echo "spawn-protection=0"       >> server.properties \
+ && echo "max-players=4"            >> server.properties \
+ && echo "view-distance=4"          >> server.properties \
+ && echo "simulation-distance=4"    >> server.properties \
+ && echo "motd=folia-redstone-test" >> server.properties \
+ && echo "enable-rcon=true"         >> server.properties \
+ && echo "rcon.password=test"       >> server.properties \
+ && echo "rcon.port=25575"          >> server.properties \
+ && echo "[]" > ops.json \
+ && echo "[]" > whitelist.json \
+ && mkdir -p plugins logs world
+
+# Folia jar is mounted or downloaded by the entrypoint (URL fixed by build pipeline)
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+EXPOSE 25565 25575
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

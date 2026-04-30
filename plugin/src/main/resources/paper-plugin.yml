@@ -1,0 +1,13 @@
+name: folia-redstone-region
+version: '${version}'
+main: net.dedale.redstone.region.PluginMain
+bootstrapper: net.dedale.redstone.region.Bootstrap
+api-version: '1.21'
+folia-supported: true
+authors: [dedale]
+description: Per-chunk redstone-engine dispatch (vanilla / alternate-current) for Folia.
+website: https://github.com/dedale-intelligence/folia-redstone-region
+permissions:
+  redstone-region.admin:
+    description: Allows use of /redstone-region administrative commands.
+    default: op

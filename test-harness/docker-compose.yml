@@ -1,0 +1,27 @@
+services:
+  folia:
+    build:
+      context: .
+      dockerfile: Dockerfile.folia
+    image: folia-redstone-test:latest
+    container_name: folia-redstone-test
+    environment:
+      FOLIA_BUILD_URL: ${FOLIA_BUILD_URL:-}
+    volumes:
+      - ./server/folia.jar:/server/folia.jar:ro
+      - ./server/plugins:/server/plugins:ro
+      - ./server/logs:/server/logs
+      - ./server/world:/server/world
+      - ./server/world_nether:/server/world_nether
+      - ./server/world_the_end:/server/world_the_end
+      - ./server/test-results:/server/test-results
+    ports:
+      - "25565:25565"
+      - "25575:25575"
+    stdin_open: true
+    tty: true
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /server/test-results/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 60

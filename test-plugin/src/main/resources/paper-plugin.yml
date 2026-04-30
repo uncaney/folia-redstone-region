@@ -1,0 +1,13 @@
+name: folia-redstone-region-tests
+version: '${version}'
+main: net.dedale.redstone.test.TestPluginMain
+api-version: '1.21'
+folia-supported: true
+authors: [dedale]
+description: In-server parity and performance harness for folia-redstone-region.
+dependencies:
+  server:
+    folia-redstone-region:
+      load: BEFORE
+      required: true
+      join-classpath: true

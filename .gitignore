@@ -1,0 +1,15 @@
+.gradle/
+build/
+.idea/
+*.iml
+.DS_Store
+out/
+bin/
+test-harness/server/
+!test-harness/server/.gitkeep
+test-harness/logs/
+test-harness/world/
+test-harness/cache/
+hs_err_pid*
+replay_pid*
+*.log
