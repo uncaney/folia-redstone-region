@@ -21,7 +21,7 @@ per-chunk.
 
 ```
 plugin/
-  src/main/java/net/dedale/redstone/region/
+  src/main/java/net/ekaii/redstone/region/
     PluginMain.java                     # JavaPlugin entrypoint (onEnable / onDisable)
     Bootstrap.java                      # PluginBootstrap — does the field swap
     config/
@@ -50,7 +50,7 @@ plugin/
       ChunkKey.java                     # Long-packed (x,z) key
 
 test-plugin/
-  src/main/java/net/dedale/redstone/test/
+  src/main/java/net/ekaii/redstone/test/
     TestPluginMain.java
     contraptions/
       Contraption.java                  # interface: build(Location), expectedOutputs(tick)
@@ -74,8 +74,8 @@ test-harness/
 
 ## Lifecycle
 
-1. **`paper-plugin.yml`** declares `bootstrapper: net.dedale.redstone.region.Bootstrap`
-   and `main: net.dedale.redstone.region.PluginMain`. `folia-supported: true`.
+1. **`paper-plugin.yml`** declares `bootstrapper: net.ekaii.redstone.region.Bootstrap`
+   and `main: net.ekaii.redstone.region.PluginMain`. `folia-supported: true`.
 2. **`Bootstrap.bootstrap(BootstrapContext ctx)`** — runs before world load:
    - Resolve `RedstoneWireBlock wire = (RedstoneWireBlock) BuiltInRegistries.BLOCK.get(ResourceLocation.parse("minecraft:redstone_wire"));`
    - `Field f = RedstoneWireBlock.class.getDeclaredField("redstoneController");`
@@ -170,7 +170,7 @@ final class ChunkRegistry {
 ## Persistence
 
 Per-chunk: `Chunk#getPersistentDataContainer().set(KEY_MODE, BYTE, mode.byteValue())`.
-- `KEY_MODE = NamespacedKey.fromString("dedale:redstone_engine")`.
+- `KEY_MODE = NamespacedKey.fromString("ekaii:redstone_engine")`.
 - Loaded on `ChunkLoadEvent` (Folia: handler runs on the region thread that
   owns the chunk, which is what we want); written on `ChunkUnloadEvent`.
 - For chunks never visited, no PDC entry → defaults to vanilla. Zero overhead.

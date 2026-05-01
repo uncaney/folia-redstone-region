@@ -79,4 +79,4 @@ cases, prints the JUnit XML and exits non-zero if any case fails.
 
 Plugin glue: MIT.
 Bundled Alternate-Current engine: MIT (Space Walker — see
-`plugin/src/main/java/net/dedale/redstone/region/ac/LICENSE`).
+`plugin/src/main/java/net/ekaii/redstone/region/ac/LICENSE`).

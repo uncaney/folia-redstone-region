@@ -3,7 +3,7 @@ plugins {
 }
 
 allprojects {
-    group = "net.dedale.redstone"
+    group = "net.ekaii.redstone"
     version = "0.1.0"
 
     repositories {

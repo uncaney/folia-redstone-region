@@ -13,7 +13,7 @@ behaviour is unchanged (vanilla); chunks opt in to AC explicitly.
    ```
    [folia-redstone-region] redstone evaluator swapped:
    net.minecraft.world.level.redstone.DefaultRedstoneWireEvaluator
-   -> net.dedale.redstone.region.nms.DispatchingEvaluator
+   -> net.ekaii.redstone.region.nms.DispatchingEvaluator
    [folia-redstone-region] folia-redstone-region 0.1.0 ready
    ```
 
@@ -53,7 +53,7 @@ Examples:
 ## Persistence
 
 Each chunk's mode is stored in its own `PersistentDataContainer` under the
-key `dedale:redstone_engine` as a single byte. On chunk load the plugin
+key `ekaii:redstone_engine` as a single byte. On chunk load the plugin
 reads the PDC and registers the chunk as AC if applicable; on `/redstone-region
 set …` the PDC is written immediately on the owning region thread. Region
 boundaries do not affect persistence: the PDC is per-chunk.

@@ -1,9 +1,9 @@
 name: folia-redstone-region-tests
 version: '${version}'
-main: net.dedale.redstone.test.TestPluginMain
+main: net.ekaii.redstone.test.TestPluginMain
 api-version: '1.21'
 folia-supported: true
-authors: [dedale]
+authors: [ekaii]
 description: In-server parity and performance harness for folia-redstone-region.
 dependencies:
   server:
