@@ -2,7 +2,7 @@ name: folia-redstone-region
 version: '${version}'
 main: net.ekaii.redstone.region.PluginMain
 bootstrapper: net.ekaii.redstone.region.Bootstrap
-api-version: '1.21'
+api-version: '26.1'
 folia-supported: true
 authors: [ekaii]
 description: Per-chunk redstone-engine dispatch (vanilla / alternate-current / eigencraft / disabled) for Folia.

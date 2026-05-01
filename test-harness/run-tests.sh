@@ -7,15 +7,15 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SERVER="$ROOT/test-harness/server"
 TIMEOUT=${TIMEOUT:-180}                # seconds to wait for tests to complete
 
-JAVA_BIN="${JAVA_HOME:-/opt/homebrew/opt/openjdk@21}/bin/java"
-[ -x "$JAVA_BIN" ] || { echo "java 21 not found at $JAVA_BIN"; exit 2; }
+JAVA_BIN="${JAVA_HOME:-/opt/homebrew/opt/openjdk@25}/bin/java"
+[ -x "$JAVA_BIN" ] || { echo "java 25 not found at $JAVA_BIN (Luminol 26.1.2 requires Java 25)"; exit 2; }
 
 mkdir -p "$SERVER/plugins" "$SERVER/test-results"
 rm -f "$SERVER/test-results/ready" "$SERVER/test-results/junit.xml"
 
-# Copy reobf plugin jars
-PLUGIN_JAR="$ROOT/plugin/build/libs/plugin-0.1.0-reobf.jar"
-TEST_JAR="$ROOT/test-plugin/build/libs/test-plugin-0.1.0-reobf.jar"
+# Copy plugin jars (shadowJar output — runtime is mojmap on 1.20.5+, no reobf needed)
+PLUGIN_JAR="$ROOT/plugin/build/libs/plugin-0.2.0.jar"
+TEST_JAR="$ROOT/test-plugin/build/libs/test-plugin-0.2.0.jar"
 [ -f "$PLUGIN_JAR" ] || { echo "plugin reobf jar missing — run ./gradlew build first"; exit 3; }
 [ -f "$TEST_JAR" ]   || { echo "test-plugin reobf jar missing — run ./gradlew build first"; exit 3; }
 cp -f "$PLUGIN_JAR" "$SERVER/plugins/folia-redstone-region.jar"
