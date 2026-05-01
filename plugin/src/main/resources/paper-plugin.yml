@@ -1,4 +1,4 @@
-name: folia-redstone-region
+name: RedstoneRegions
 version: '${version}'
 main: net.ekaii.redstone.region.PluginMain
 bootstrapper: net.ekaii.redstone.region.Bootstrap
