@@ -22,6 +22,12 @@ import java.util.logging.Logger;
  * {@code RedStoneWireBlock.updateSurroundingRedstone} →
  * {@code updatePowerStrength} → {@code this.evaluator.updatePowerStrength(...)},
  * which is the field we have swapped with our dispatcher.
+ *
+ * <p><b>Do not remove this listener as "respecting user config".</b> The
+ * per-chunk dispatcher is the user-facing surface; the global Paper config is
+ * an implementation detail of how we hook the evaluator. If the operator wants
+ * AC <em>everywhere</em>, the right answer is {@code /redstone-region fill 32
+ * alternate-current}, not the Paper global.
  */
 public final class PaperConfigForcer implements Listener {
 

@@ -14,6 +14,17 @@ import java.util.logging.Logger;
  * private {@code evaluator} field. Reverse operation supported for graceful
  * unloading on disable, though that is best-effort: any wire updates that
  * happen between disable and full server shutdown go back to vanilla.
+ *
+ * <p><b>Why reflective write on a {@code private final} field works (JDK 21).</b>
+ * The {@code evaluator} field is {@code private final} but <em>non-static</em>.
+ * Per JLS 17.5 + the JDK reflection spec, {@code Field.set} on an instance
+ * final field is allowed once {@code setAccessible(true)} is called — the
+ * "final" prohibition applies only to <em>static</em> finals (those may be
+ * inlined by the JIT before the swap). For instance finals, the JIT does not
+ * inline across {@code getfield}, so our subsequent reads see the new value.
+ * If Mojang ever changes the field to {@code static} we will need a different
+ * hook (e.g. ByteBuddy retransform); detect that by catching the swap failure
+ * and logging — do not crash the plugin.
  */
 public final class EvaluatorSwap {
 

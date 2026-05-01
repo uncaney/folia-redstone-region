@@ -54,6 +54,23 @@ public final class AcRedstoneWireEvaluator extends RedstoneWireEvaluator {
         return h;
     }
 
+    /**
+     * Demultiplexes Mojang's single-method {@code RedstoneWireEvaluator.updatePowerStrength}
+     * back into AC's three call kinds (add / remove / neighbor-update). AC needs the
+     * distinction to drive its graph-rebuild vs power-recalc paths.
+     *
+     * <p>Discriminant:
+     * <ul>
+     *   <li>{@code updateShape == true} → place. Set by {@code RedStoneWireBlock.onPlace}
+     *       → {@code updateSurroundingRedstone(..., blockAdded=true)}.</li>
+     *   <li>{@code updateShape == false} && block at {@code pos} no longer wire →
+     *       removal. {@code state} is the <em>old</em> wire state passed in by
+     *       {@code affectNeighborsAfterRemoval} (Paper's signature requires it for
+     *       network-snapshot accounting).</li>
+     *   <li>{@code updateShape == false} && block at {@code pos} still wire →
+     *       neighbor change.</li>
+     * </ul>
+     */
     @Override
     public void updatePowerStrength(Level level, BlockPos pos, BlockState state,
                                     @Nullable Orientation orientation, boolean updateShape) {
@@ -65,16 +82,12 @@ public final class AcRedstoneWireEvaluator extends RedstoneWireEvaluator {
         WireHandler h = handlerFor(sl);
 
         if (updateShape) {
-            // Place case (caller is RedStoneWireBlock.onPlace -> updateSurroundingRedstone).
             h.onWireAdded(pos, state);
             stats.merge("added", 1L, Long::sum);
         } else if (!sl.getBlockState(pos).is(this.wireBlock)) {
-            // Removal: the block at `pos` is no longer wire (already replaced).
-            // `state` is the OLD wire state, passed by Paper for AC's removal accounting.
             h.onWireRemoved(pos, state);
             stats.merge("removed", 1L, Long::sum);
         } else {
-            // Neighbor change: wire still present.
             h.onWireUpdated(pos, state, orientation);
             stats.merge("updated", 1L, Long::sum);
         }

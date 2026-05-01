@@ -14,6 +14,19 @@ import java.util.concurrent.locks.StampedLock;
  * Per-(level, chunkPos) redstone-mode registry. Read on every wire update on the
  * region thread that owns the chunk; writes happen at chunk-load (PDC restore) and
  * via /redstone-region commands.
+ *
+ * <p><b>Why {@link StampedLock} and not {@link ConcurrentHashMap}.</b>
+ * The hot path runs <em>inside</em> the redstone evaluator, ~once per wire per
+ * tick on AC-marked chunks. A {@code ConcurrentHashMap.get} pays a {@code volatile}
+ * read + a CAS for the iteration counter on each call; on dust-heavy networks
+ * that overhead would dominate the dispatch. A {@code StampedLock} optimistic
+ * read is one plain field read for the stamp, one plain map read, one
+ * {@code validate} that's a {@code volatile} read — and steady-state
+ * contention is zero (writes only on chunk-load and on /redstone-region set).
+ * The fallback to {@code readLock()} on stamp invalidation is rare in practice.
+ *
+ * <p>Do not "simplify" this to {@code ConcurrentHashMap<Long,Byte>} without
+ * measuring — the dispatch overhead becomes visible on 32×32+ dust grids.
  */
 public final class ChunkRegistry {
 
