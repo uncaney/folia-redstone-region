@@ -21,10 +21,17 @@ public final class TestPluginMain extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        // Schedule the test driver on the global region scheduler — its body
-        // dispatches per-region work via RegionScheduler.execute.
-        Bukkit.getGlobalRegionScheduler().runDelayed(this, $ -> startRun(), INITIAL_DELAY_TICKS);
-        getLogger().info("test-plugin scheduled: starting run in " + INITIAL_DELAY_TICKS + " ticks");
+        boolean autoRun = Boolean.parseBoolean(System.getProperty("folia-redstone-region.autoRun", "true"));
+        if (autoRun) {
+            Bukkit.getGlobalRegionScheduler().runDelayed(this, $ -> startRun(), INITIAL_DELAY_TICKS);
+            getLogger().info("test-plugin scheduled: starting run in " + INITIAL_DELAY_TICKS + " ticks");
+        } else {
+            getLogger().info("test-plugin loaded (autoRun=false); /demo-map available");
+        }
+        // Register /demo-map and /lag-machine (work regardless of autoRun)
+        getServer().getCommandMap().register("folia-redstone-region", new DemoMapCommand(this));
+        getServer().getCommandMap().register("folia-redstone-region", new LagMachineCommand(this));
+        getServer().getCommandMap().register("folia-redstone-region", new PerfSweepCommand(this));
     }
 
     private void startRun() {
