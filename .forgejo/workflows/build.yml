@@ -1,0 +1,44 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: eclipse-temurin:21-jdk
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            .gradle
+          key: gradle-${{ hashFiles('**/*.gradle.kts','gradle/wrapper/gradle-wrapper.properties','gradle.properties') }}
+          restore-keys: gradle-
+
+      - name: Build
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon :plugin:build :test-plugin:build
+
+      - name: Upload plugin jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: folia-redstone-region
+          path: plugin/build/libs/plugin-*-reobf.jar
+
+      - name: Upload test-plugin jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: folia-redstone-region-tests
+          path: test-plugin/build/libs/test-plugin-*-reobf.jar
