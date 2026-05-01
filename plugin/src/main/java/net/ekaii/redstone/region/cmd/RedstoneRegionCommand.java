@@ -61,6 +61,7 @@ public final class RedstoneRegionCommand {
                         .then(Commands.argument("limit", IntegerArgumentType.integer(1, 100))
                                 .executes(c -> stats(c, IntegerArgumentType.getInteger(c, "limit")))))
                 .then(Commands.literal("check").executes(c -> check(c, registry)))
+                .then(Commands.literal("profile").executes(c -> profile(c, registry)))
                 .then(Commands.literal("selection")
                         .then(Commands.argument("mode", StringArgumentType.word())
                                 .suggests(RedstoneRegionCommand::suggestModes)
@@ -83,6 +84,7 @@ public final class RedstoneRegionCommand {
         helpLine(s, "/redstone-region stats [limit]",                 "top-N chunks les plus chers en redstone");
         helpLine(s, "/redstone-region stats reset",                   "vide les compteurs de timing");
         helpLine(s, "/redstone-region check",                         "scanne le chunk pour patterns piston/observer suspects");
+        helpLine(s, "/redstone-region profile",                       "rapport complet du chunk : composants + timing + reco mode");
         helpLine(s, "/redstone-region selection <mode>",              "applique <mode> à la selection WorldEdit du joueur");
         s.sendMessage(Component.empty());
         s.sendMessage(Component.text("modes:", NamedTextColor.AQUA));
@@ -381,6 +383,155 @@ public final class RedstoneRegionCommand {
             sender.sendMessage(Component.text("(no redstone components detected — AC vs vanilla is moot here)", NamedTextColor.GRAY));
         }
         return 1;
+    }
+
+    /**
+     * Full diagnostic of the chunk under the player: current mode, components
+     * count, timing stats since boot, and a recommended action. Block scan runs
+     * on the chunk's owning region thread (Folia-safe); the report message is
+     * sent back via the same scheduled task so the output order is deterministic.
+     */
+    private static int profile(CommandContext<CommandSourceStack> ctx, ChunkRegistry registry) {
+        var src = ctx.getSource();
+        Entity executor = src.getExecutor();
+        if (executor == null) {
+            src.getSender().sendMessage(Component.text("must be run by an entity (uses your current chunk)", NamedTextColor.RED));
+            return 0;
+        }
+        Chunk chunk = executor.getLocation().getChunk();
+        World w = executor.getWorld();
+        ResourceKey<Level> dim = ((CraftWorld) w).getHandle().dimension();
+        int cx = chunk.getX(), cz = chunk.getZ();
+        var sender = src.getSender();
+
+        // Snapshot what we can read from any thread first
+        RedstoneMode mode = registry.modeOfChunk(dim, cx, cz);
+        int totalNonVanilla = registry.trackedCount(dim);
+        var cell = TIMING == null ? null : TIMING.get(dim.identifier().toString(), cx, cz);
+
+        // Block scan must run on the region thread that owns this chunk
+        Bukkit.getRegionScheduler().execute(pluginRef(), w, cx, cz, () -> {
+            int dust = 0, repeaters = 0, comparators = 0, pistons = 0, stickies = 0,
+                observers = 0, sources = 0, lamps = 0, torches = 0;
+            int bx = cx << 4, bz = cz << 4;
+            int yMin = w.getMinHeight(), yMax = w.getMaxHeight();
+            for (int x = bx; x < bx + 16; x++)
+                for (int z = bz; z < bz + 16; z++)
+                    for (int y = yMin; y < yMax; y++) {
+                        var t = w.getBlockAt(x, y, z).getType();
+                        switch (t) {
+                            case REDSTONE_WIRE -> dust++;
+                            case REPEATER -> repeaters++;
+                            case COMPARATOR -> comparators++;
+                            case PISTON -> pistons++;
+                            case STICKY_PISTON -> stickies++;
+                            case OBSERVER -> observers++;
+                            case REDSTONE_BLOCK, LEVER, STONE_BUTTON, OAK_BUTTON, BIRCH_BUTTON,
+                                 SPRUCE_BUTTON, JUNGLE_BUTTON, ACACIA_BUTTON, DARK_OAK_BUTTON,
+                                 MANGROVE_BUTTON, CHERRY_BUTTON, BAMBOO_BUTTON, CRIMSON_BUTTON,
+                                 WARPED_BUTTON, PALE_OAK_BUTTON, POLISHED_BLACKSTONE_BUTTON -> sources++;
+                            case REDSTONE_LAMP -> lamps++;
+                            case REDSTONE_TORCH, REDSTONE_WALL_TORCH -> torches++;
+                            default -> {}
+                        }
+                    }
+
+            // Build and send the report (Adventure components are async-safe)
+            sender.sendMessage(Component.text("═══ Profile @ " + abbrevDim(dim.identifier().toString(), 32)
+                    + " chunk (" + cx + ", " + cz + ") ═══", NamedTextColor.GOLD));
+            sender.sendMessage(Component.text(
+                    "  block-bounds: (" + bx + ".." + (bx + 15) + ", " + bz + ".." + (bz + 15)
+                            + ")    full Y range: " + yMin + ".." + yMax,
+                    NamedTextColor.DARK_GRAY));
+            sender.sendMessage(Component.text("  current mode:  ", NamedTextColor.GRAY)
+                    .append(Component.text(mode.slug(), modeColor(mode)))
+                    .append(Component.text("    (" + totalNonVanilla + " non-vanilla chunks in this dim)", NamedTextColor.DARK_GRAY)));
+
+            sender.sendMessage(Component.text("  ── Components ──", NamedTextColor.AQUA));
+            sender.sendMessage(Component.text(String.format(
+                    "  dust=%d  repeaters=%d  comparators=%d  pistons=%d  sticky=%d  observers=%d",
+                    dust, repeaters, comparators, pistons, stickies, observers), NamedTextColor.WHITE));
+            sender.sendMessage(Component.text(String.format(
+                    "  sources(lever/button/red-block)=%d  lamps=%d  torches=%d",
+                    sources, lamps, torches), NamedTextColor.WHITE));
+
+            sender.sendMessage(Component.text("  ── Timing (since plugin start / last /stats reset) ──", NamedTextColor.AQUA));
+            if (cell == null || cell.count() == 0) {
+                sender.sendMessage(Component.text(
+                        "  no redstone updates recorded yet — toggle a lever, then /profile again",
+                        NamedTextColor.GRAY));
+            } else {
+                long c = cell.count();
+                long total = cell.totalNs();
+                long avg = total / c;
+                long worst = cell.maxNs();
+                double tickPctAvg  = avg / 50_000_000.0 * 100.0;   // 1 tick = 50 ms
+                double tickPctWorst = worst / 50_000_000.0 * 100.0;
+                sender.sendMessage(Component.text(String.format(
+                        "  updates=%d   total=%s   avg=%s/update   worst=%s/update",
+                        c, humanTime(total), humanTime(avg), humanTime(worst)), NamedTextColor.WHITE));
+                sender.sendMessage(Component.text(String.format(
+                        "  → 1 typical update consumes ~%.2f%% of a server tick (50 ms budget); worst was %.1f%%.",
+                        tickPctAvg, tickPctWorst), NamedTextColor.GRAY));
+            }
+
+            // Recommendation engine
+            sender.sendMessage(Component.text("  ── Recommendation ──", NamedTextColor.AQUA));
+            String reco = recommend(mode, dust, pistons + stickies, observers, cell);
+            sender.sendMessage(Component.text("  " + reco, recoColor(reco)));
+            sender.sendMessage(Component.text(
+                    "  Try: /redstone-region set <mode>   then re-run /profile to compare.",
+                    NamedTextColor.DARK_GRAY));
+        });
+        return 1;
+    }
+
+    private static String recommend(RedstoneMode current, int dust, int pistonsAll, int observers,
+                                     net.ekaii.redstone.region.timing.ChunkTimingTable.Cell cell) {
+        long avgUs = cell == null ? 0 : (cell.count() == 0 ? 0 : cell.totalNs() / cell.count() / 1_000);
+        boolean hot     = avgUs >= 1_000;       // ≥ 1 ms per update
+        boolean veryHot = avgUs >= 4_000;       // ≥ 4 ms — clearly slow on vanilla
+        boolean dustHeavy = dust >= 32;
+        boolean risky     = pistonsAll > 0 && (observers > 0 || dust >= 16);
+
+        if (current == RedstoneMode.DISABLED) {
+            return "ℹ This chunk is FROZEN — wire never updates. /set vanilla|alternate-current to thaw.";
+        }
+        if (current == RedstoneMode.VANILLA) {
+            if (veryHot && !risky) return "✓ Hot chunk + dust-friendly. Switching to alternate-current is recommended (avg "
+                    + humanTime(avgUs * 1_000L) + " > 4 ms).";
+            if (veryHot && risky)  return "⚠ Hot AND risky (piston+observer/dust mix). Try eigencraft first — milder edge cases than AC.";
+            if (hot && dustHeavy)  return "✓ Mid-hot dust-heavy. alternate-current likely 2-5× faster here.";
+            if (hot && risky)      return "→ Mildly hot + risky. eigencraft is the safe perf upgrade for this build.";
+            if (dust + pistonsAll + observers == 0) return "(no redstone here — no recommendation)";
+            return "✓ Currently fast enough. Keep vanilla unless you measure a problem.";
+        }
+        if (current == RedstoneMode.ALTERNATE_CURRENT) {
+            if (risky) return "⚠ AC chunk with piston+observer mix — verify your build still works (self-shape-update edge case).";
+            if (avgUs > 0 && avgUs < 200) return "✓ AC is doing its job — avg " + humanTime(avgUs * 1_000L) + " is well below 1 ms/update.";
+            return "✓ alternate-current active. Run /redstone-region check to confirm no risky patterns.";
+        }
+        if (current == RedstoneMode.EIGENCRAFT) {
+            if (avgUs > 2_000) return "→ Still hot under eigencraft. alternate-current usually 2× faster but check edge cases first.";
+            return "✓ eigencraft active. Good middle ground if AC was breaking things.";
+        }
+        return "(no recommendation)";
+    }
+
+    private static NamedTextColor modeColor(RedstoneMode m) {
+        return switch (m) {
+            case VANILLA           -> NamedTextColor.WHITE;
+            case ALTERNATE_CURRENT -> NamedTextColor.GREEN;
+            case EIGENCRAFT        -> NamedTextColor.AQUA;
+            case DISABLED          -> NamedTextColor.RED;
+        };
+    }
+
+    private static NamedTextColor recoColor(String reco) {
+        if (reco.startsWith("⚠")) return NamedTextColor.YELLOW;
+        if (reco.startsWith("✓")) return NamedTextColor.GREEN;
+        if (reco.startsWith("→")) return NamedTextColor.AQUA;
+        return NamedTextColor.GRAY;
     }
 
     private static int selection(CommandContext<CommandSourceStack> ctx, ChunkRegistry registry) {
