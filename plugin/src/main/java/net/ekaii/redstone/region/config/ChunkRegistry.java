@@ -95,6 +95,27 @@ public final class ChunkRegistry {
         finally { pl.lock.unlockRead(stamp); }
     }
 
+    /**
+     * Snapshot of every non-default chunk in a level. List of long-packed
+     * {@code (chunkX, chunkZ)} keys. Caller decodes via {@link net.ekaii.redstone.region.util.ChunkKey#unpackX}.
+     * Held under the level's read-lock for the duration of the iteration.
+     */
+    public long[] snapshotKeys(ResourceKey<Level> levelKey) {
+        PerLevel pl = byLevel.get(levelKey);
+        if (pl == null) return new long[0];
+        long stamp = pl.lock.readLock();
+        try {
+            long[] out = new long[pl.modes.size()];
+            int i = 0;
+            for (var it = pl.modes.long2ByteEntrySet().fastIterator(); it.hasNext(); ) {
+                out[i++] = it.next().getLongKey();
+            }
+            return out;
+        } finally {
+            pl.lock.unlockRead(stamp);
+        }
+    }
+
     /** Drop in-memory state for a level (e.g. on world unload). */
     public void evictLevel(ResourceKey<Level> levelKey) {
         byLevel.remove(levelKey);

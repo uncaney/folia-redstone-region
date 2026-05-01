@@ -49,7 +49,12 @@ public final class RedstoneRegionCommand {
                         .executes(c -> clearOne(c, registry))
                         .then(Commands.argument("radius", IntegerArgumentType.integer(0, 32))
                                 .executes(c -> clearArea(c, registry))))
-                .then(Commands.literal("list").executes(c -> list(c, registry)));
+                .then(Commands.literal("list").executes(c -> list(c, registry)))
+                .then(Commands.literal("where").executes(c -> where(c, registry)))
+                .then(Commands.literal("map")
+                        .executes(c -> map(c, registry, 8))
+                        .then(Commands.argument("radius", IntegerArgumentType.integer(1, 32))
+                                .executes(c -> map(c, registry, IntegerArgumentType.getInteger(c, "radius")))));
     }
 
     private static int help(CommandContext<CommandSourceStack> ctx) {
@@ -63,6 +68,8 @@ public final class RedstoneRegionCommand {
         helpLine(s, "/redstone-region clear",                         "remet le chunk courant en vanilla");
         helpLine(s, "/redstone-region clear <radius>",                "remet un carré en vanilla");
         helpLine(s, "/redstone-region list",                          "compteur des chunks non-vanilla par dimension");
+        helpLine(s, "/redstone-region where",                         "liste détaillée des chunks AC du monde courant (coords chunk + bloc)");
+        helpLine(s, "/redstone-region map [radius]",                  "mini-map ASCII en chat (radius par défaut 8 = 17×17 chunks)");
         s.sendMessage(Component.empty());
         s.sendMessage(Component.text("modes:", NamedTextColor.AQUA));
         s.sendMessage(Component.text("  vanilla            ", NamedTextColor.GRAY).append(Component.text("comportement Mojang strict, toutes les contraptions marchent", NamedTextColor.WHITE)));
@@ -173,6 +180,79 @@ public final class RedstoneRegionCommand {
         int count = applyArea(executor.getWorld(), chunk.getX(), chunk.getZ(), radius, RedstoneMode.VANILLA, registry);
         src.getSender().sendMessage(Component.text("→ vanilla for " + count + " chunks", NamedTextColor.GREEN));
         return count;
+    }
+
+    private static int where(CommandContext<CommandSourceStack> ctx, ChunkRegistry registry) {
+        var src = ctx.getSource();
+        Entity executor = src.getExecutor();
+        if (executor == null) {
+            src.getSender().sendMessage(Component.text("must be run by an entity (uses your current world)", NamedTextColor.RED));
+            return 0;
+        }
+        World w = executor.getWorld();
+        ResourceKey<Level> dim = ((CraftWorld) w).getHandle().dimension();
+        long[] keys = registry.snapshotKeys(dim);
+        var sender = src.getSender();
+        sender.sendMessage(Component.text("=== AC chunks in " + dim.identifier() + " (" + keys.length + ") ===", NamedTextColor.GOLD));
+        if (keys.length == 0) {
+            sender.sendMessage(Component.text("(none — every chunk is vanilla)", NamedTextColor.GRAY));
+            return 1;
+        }
+        // Sort for deterministic output
+        java.util.Arrays.sort(keys);
+        int max = Math.min(keys.length, 50);
+        for (int i = 0; i < max; i++) {
+            int cx = net.ekaii.redstone.region.util.ChunkKey.unpackX(keys[i]);
+            int cz = net.ekaii.redstone.region.util.ChunkKey.unpackZ(keys[i]);
+            int wx = cx << 4, wz = cz << 4;
+            sender.sendMessage(Component.text(
+                    String.format("  chunk (%4d, %4d)  →  blocks (%5d..%5d, %5d..%5d)",
+                            cx, cz, wx, wx + 15, wz, wz + 15),
+                    NamedTextColor.AQUA));
+        }
+        if (keys.length > max) {
+            sender.sendMessage(Component.text("  … " + (keys.length - max) + " more (truncated)", NamedTextColor.GRAY));
+        }
+        return keys.length;
+    }
+
+    private static int map(CommandContext<CommandSourceStack> ctx, ChunkRegistry registry, int radius) {
+        var src = ctx.getSource();
+        Entity executor = src.getExecutor();
+        if (executor == null) {
+            src.getSender().sendMessage(Component.text("must be run by an entity (centred on your chunk)", NamedTextColor.RED));
+            return 0;
+        }
+        World w = executor.getWorld();
+        ResourceKey<Level> dim = ((CraftWorld) w).getHandle().dimension();
+        Chunk you = executor.getLocation().getChunk();
+        int cx = you.getX(), cz = you.getZ();
+        var sender = src.getSender();
+        sender.sendMessage(Component.text("=== map @ chunk (" + cx + ", " + cz + ") radius=" + radius + " ===", NamedTextColor.GOLD));
+        sender.sendMessage(Component.text("█ AC   · vanilla   ◉ you", NamedTextColor.GRAY));
+        // Render N→S top-to-bottom (decreasing Z is north on Bukkit; player oriented map: north up)
+        for (int dz = -radius; dz <= radius; dz++) {
+            Component line = Component.empty();
+            for (int dx = -radius; dx <= radius; dx++) {
+                int qx = cx + dx, qz = cz + dz;
+                boolean isYou = (dx == 0 && dz == 0);
+                RedstoneMode m = registry.modeOfChunk(dim, qx, qz);
+                if (isYou) {
+                    line = line.append(Component.text("◉",
+                            m == RedstoneMode.ALTERNATE_CURRENT ? NamedTextColor.YELLOW : NamedTextColor.WHITE));
+                } else if (m == RedstoneMode.ALTERNATE_CURRENT) {
+                    line = line.append(Component.text("█", NamedTextColor.GREEN));
+                } else {
+                    line = line.append(Component.text("·", NamedTextColor.DARK_GRAY));
+                }
+            }
+            sender.sendMessage(line);
+        }
+        // Footer scale hint
+        sender.sendMessage(Component.text(
+                "1 char = 1 chunk (16 blocks); covers ±" + (radius * 16) + " blocks",
+                NamedTextColor.GRAY));
+        return 1;
     }
 
     private static int list(CommandContext<CommandSourceStack> ctx, ChunkRegistry registry) {
