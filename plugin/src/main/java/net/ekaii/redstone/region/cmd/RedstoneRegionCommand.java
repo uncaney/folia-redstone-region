@@ -33,6 +33,8 @@ public final class RedstoneRegionCommand {
     public static LiteralArgumentBuilder<CommandSourceStack> root(ChunkRegistry registry) {
         return Commands.literal("redstone-region")
                 .requires(s -> s.getSender().hasPermission(PERM))
+                .executes(c -> help(c))   // bare /redstone-region also prints help
+                .then(Commands.literal("help").executes(c -> help(c)))
                 .then(Commands.literal("info").executes(c -> info(c, registry)))
                 .then(Commands.literal("set")
                         .then(Commands.argument("mode", StringArgumentType.word())
@@ -48,6 +50,41 @@ public final class RedstoneRegionCommand {
                         .then(Commands.argument("radius", IntegerArgumentType.integer(0, 32))
                                 .executes(c -> clearArea(c, registry))))
                 .then(Commands.literal("list").executes(c -> list(c, registry)));
+    }
+
+    private static int help(CommandContext<CommandSourceStack> ctx) {
+        var s = ctx.getSource().getSender();
+        s.sendMessage(Component.text("=== /redstone-region ===", NamedTextColor.GOLD));
+        s.sendMessage(Component.text("Choisis l'algo redstone par chunk: vanilla (Mojang) ou alternate-current (Space Walker, ~3-15× plus rapide sur dust).", NamedTextColor.GRAY));
+        s.sendMessage(Component.empty());
+        helpLine(s, "/redstone-region info",                          "mode du chunk où tu te trouves");
+        helpLine(s, "/redstone-region set <mode>",                    "applique <mode> au chunk courant");
+        helpLine(s, "/redstone-region fill <radius> <mode>",          "applique à un carré (2r+1)×(2r+1) chunks (r ≤ 32 = jusqu'à 65×65 chunks)");
+        helpLine(s, "/redstone-region clear",                         "remet le chunk courant en vanilla");
+        helpLine(s, "/redstone-region clear <radius>",                "remet un carré en vanilla");
+        helpLine(s, "/redstone-region list",                          "compteur des chunks non-vanilla par dimension");
+        s.sendMessage(Component.empty());
+        s.sendMessage(Component.text("modes:", NamedTextColor.AQUA));
+        s.sendMessage(Component.text("  vanilla            ", NamedTextColor.GRAY).append(Component.text("comportement Mojang strict, toutes les contraptions marchent", NamedTextColor.WHITE)));
+        s.sendMessage(Component.text("  alternate-current  ", NamedTextColor.GRAY).append(Component.text("BFS + single-write, plus rapide mais quelques edge cases (cf. ci-dessous)", NamedTextColor.WHITE)));
+        s.sendMessage(Component.empty());
+        s.sendMessage(Component.text("edge cases qui ne marchent QU'EN vanilla:", NamedTextColor.YELLOW));
+        s.sendMessage(Component.text("  • piston BUD via self-shape-update du wire (un palier intermédiaire est skippé en AC)", NamedTextColor.WHITE));
+        s.sendMessage(Component.text("  • observer face à un wire qui compte les paliers de power", NamedTextColor.WHITE));
+        s.sendMessage(Component.text("  • update-order strict MC-11193 (rare, ne casse que des designs ultra-précis)", NamedTextColor.WHITE));
+        s.sendMessage(Component.empty());
+        s.sendMessage(Component.text("conseil: garde le monde en vanilla par défaut, marque en AC les zones dust-heavy (sorters, mega-bases, ferme à coffres). Évite AC sur des trucs piston+observer mixés.", NamedTextColor.GRAY));
+        s.sendMessage(Component.empty());
+        s.sendMessage(Component.text("exemple:", NamedTextColor.AQUA));
+        s.sendMessage(Component.text("  /redstone-region fill 8 alternate-current   ", NamedTextColor.GRAY).append(Component.text("17×17 chunks autour de toi en AC", NamedTextColor.WHITE)));
+        s.sendMessage(Component.text("  /redstone-region info                       ", NamedTextColor.GRAY).append(Component.text("vérifie la prise d'effet", NamedTextColor.WHITE)));
+        s.sendMessage(Component.text("  /redstone-region clear 8                    ", NamedTextColor.GRAY).append(Component.text("annule, retour au vanilla", NamedTextColor.WHITE)));
+        return 1;
+    }
+
+    private static void helpLine(org.bukkit.command.CommandSender s, String cmd, String desc) {
+        s.sendMessage(Component.text(cmd, NamedTextColor.GREEN)
+                .append(Component.text(" — " + desc, NamedTextColor.WHITE)));
     }
 
     private static CompletableFuture<Suggestions> suggestModes(
