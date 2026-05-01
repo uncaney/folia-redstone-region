@@ -48,12 +48,17 @@ public final class PluginMain extends JavaPlugin {
             log.severe("could not install dispatching evaluator: " + e);
         }
 
-        // 3. Audit log + timing table.
+        // 3. Audit log + timing table + timing policy.
         this.auditLog = new AuditLog(this, config.auditEnabled,
                 getDataFolder().toPath().resolve(config.auditPath), config.auditRotateKeep);
         this.timing = new ChunkTimingTable();
+        var policy = net.ekaii.redstone.region.timing.TimingPolicy.parse(config.timingMode, config.timingSampleRate);
         DispatchingEvaluator de = EvaluatorSwap.installedDispatcher();
-        if (de != null) de.setTimingTable(timing);
+        if (de != null) {
+            de.setTimingTable(timing);
+            de.setTimingPolicy(policy);
+        }
+        log.info("timing policy: " + policy);
 
         // 4. Discord webhook (no-op if disabled or url empty).
         this.discord = new DiscordWebhook(config.discordEnabled, config.discordWebhookUrl, config.discordFilter, log);
@@ -81,10 +86,16 @@ public final class PluginMain extends JavaPlugin {
                     new SignOptInListener(this, ChunkRegistry.get(), auditLog, discord, config), this);
         }
 
-        // 8. Auto-AC scanner (config-gated).
+        // 8. Auto-AC scanner (config-gated). Refuses to start if timing policy
+        //    can't see vanilla chunks (since the scanner needs to detect them).
         if (config.autoAcEnabled) {
-            this.autoAcScanner = new AutoAcScanner(this, ChunkRegistry.get(), timing, auditLog, discord, config);
-            this.autoAcScanner.start();
+            if (!policy.isAuditableForAutoAc()) {
+                log.warning("auto-ac is enabled but timing.mode=" + policy.mode()
+                        + " hides vanilla chunks — scanner will not start");
+            } else {
+                this.autoAcScanner = new AutoAcScanner(this, ChunkRegistry.get(), timing, auditLog, discord, config);
+                this.autoAcScanner.start();
+            }
         }
 
         // 9. PlaceholderAPI bridge (soft-dep).
@@ -150,20 +161,21 @@ public final class PluginMain extends JavaPlugin {
      */
     public String reloadPluginConfig() {
         Logger log = getLogger();
-        // Re-read config.yml from disk
         this.config = PluginConfig.load(this);
-        // Reload language bundle
         Messages.reload(this, config.language, log);
-        // Recreate Discord webhook with potentially new URL/filter
         if (discord != null) discord.close();
         this.discord = new net.ekaii.redstone.region.bridge.DiscordWebhook(
                 config.discordEnabled, config.discordWebhookUrl, config.discordFilter, log);
-        // Re-bind only the reloadable references in the command tree
+        // Apply new timing policy live to the dispatcher
+        var policy = net.ekaii.redstone.region.timing.TimingPolicy.parse(config.timingMode, config.timingSampleRate);
+        DispatchingEvaluator de = EvaluatorSwap.installedDispatcher();
+        if (de != null) de.setTimingPolicy(policy);
         RedstoneRegionCommand.rebindContextLight(auditLog, discord, config);
         log.info("config reloaded — language=" + config.language
                 + ", sign=" + config.signEnabled
                 + ", auto-ac=" + config.autoAcEnabled
-                + ", discord=" + config.discordEnabled);
+                + ", discord=" + config.discordEnabled
+                + ", timing=" + policy);
         return config.language;
     }
 }

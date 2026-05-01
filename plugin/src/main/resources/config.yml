@@ -49,6 +49,24 @@ alternate-current:
   #         vertical-first-outward,   vertical-first-inward
   default-update-order: horizontal-first-outward
 
+# === Timing instrumentation ===
+# Controls how often the plugin records nanos-per-update for /stats and /profile.
+# Lower-frequency recording = lower overhead in the redstone hot path.
+timing:
+  # mode = all                — record every update (default; ~50ns overhead per
+  #                             wire update; full data for /stats and /profile)
+  #        sample             — record every 1/sample-rate updates only
+  #                             (overhead divided by sample-rate; /stats numbers
+  #                             are scaled estimates; auto-AC still works)
+  #        non-vanilla-only   — record only chunks that are AC/eigencraft/disabled
+  #                             (zero overhead on vanilla chunks; auto-AC scanner
+  #                             cannot detect new hot vanilla chunks in this mode)
+  #        off                — disable timing entirely (zero overhead; /stats
+  #                             returns empty; auto-AC scanner refuses to start)
+  mode: all
+  # When mode=sample, record one out of every N updates. 1 = same as mode=all.
+  sample-rate: 1
+
 # === Discord webhook on flip ===
 discord:
   enabled: false

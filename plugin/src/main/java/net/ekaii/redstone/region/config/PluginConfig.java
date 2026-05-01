@@ -24,6 +24,9 @@ public final class PluginConfig {
 
     public final String acDefaultUpdateOrder;
 
+    public final String timingMode;
+    public final int    timingSampleRate;
+
     public final boolean discordEnabled;
     public final String discordWebhookUrl;
     public final String discordFilter;
@@ -47,6 +50,9 @@ public final class PluginConfig {
         this.autoAcAutoRevert      = c.getBoolean("auto-ac.auto-revert", false);
 
         this.acDefaultUpdateOrder = c.getString("alternate-current.default-update-order", "horizontal-first-outward");
+
+        this.timingMode       = c.getString("timing.mode", "all");
+        this.timingSampleRate = Math.max(1, c.getInt("timing.sample-rate", 1));
 
         this.discordEnabled    = c.getBoolean("discord.enabled", false);
         this.discordWebhookUrl = c.getString("discord.webhook-url", "");
