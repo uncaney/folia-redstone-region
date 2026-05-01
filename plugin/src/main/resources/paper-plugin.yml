@@ -5,9 +5,17 @@ bootstrapper: net.ekaii.redstone.region.Bootstrap
 api-version: '1.21'
 folia-supported: true
 authors: [ekaii]
-description: Per-chunk redstone-engine dispatch (vanilla / alternate-current) for Folia.
+description: Per-chunk redstone-engine dispatch (vanilla / alternate-current / eigencraft / disabled) for Folia.
 website: https://github.com/uncaney/folia-redstone-region
+dependencies:
+  server:
+    BlueMap:        { load: BEFORE, required: false, join-classpath: false }
+    PlaceholderAPI: { load: BEFORE, required: false, join-classpath: false }
+    WorldEdit:      { load: BEFORE, required: false, join-classpath: false }
 permissions:
   redstone-region.admin:
     description: Allows use of /redstone-region administrative commands.
+    default: op
+  redstone-region.sign:
+    description: Allows placing [ac]/[vanilla]/etc. signs to flip chunks.
     default: op

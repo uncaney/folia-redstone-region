@@ -54,7 +54,17 @@ public final class RedstoneRegionCommand {
                 .then(Commands.literal("map")
                         .executes(c -> map(c, registry, 8))
                         .then(Commands.argument("radius", IntegerArgumentType.integer(1, 32))
-                                .executes(c -> map(c, registry, IntegerArgumentType.getInteger(c, "radius")))));
+                                .executes(c -> map(c, registry, IntegerArgumentType.getInteger(c, "radius")))))
+                .then(Commands.literal("stats")
+                        .executes(c -> stats(c, 10))
+                        .then(Commands.literal("reset").executes(c -> statsReset(c)))
+                        .then(Commands.argument("limit", IntegerArgumentType.integer(1, 100))
+                                .executes(c -> stats(c, IntegerArgumentType.getInteger(c, "limit")))))
+                .then(Commands.literal("check").executes(c -> check(c, registry)))
+                .then(Commands.literal("selection")
+                        .then(Commands.argument("mode", StringArgumentType.word())
+                                .suggests(RedstoneRegionCommand::suggestModes)
+                                .executes(c -> selection(c, registry))));
     }
 
     private static int help(CommandContext<CommandSourceStack> ctx) {
@@ -68,12 +78,18 @@ public final class RedstoneRegionCommand {
         helpLine(s, "/redstone-region clear",                         "remet le chunk courant en vanilla");
         helpLine(s, "/redstone-region clear <radius>",                "remet un carré en vanilla");
         helpLine(s, "/redstone-region list",                          "compteur des chunks non-vanilla par dimension");
-        helpLine(s, "/redstone-region where",                         "liste détaillée des chunks AC du monde courant (coords chunk + bloc)");
+        helpLine(s, "/redstone-region where",                         "liste détaillée des chunks non-vanilla du monde courant");
         helpLine(s, "/redstone-region map [radius]",                  "mini-map ASCII en chat (radius par défaut 8 = 17×17 chunks)");
+        helpLine(s, "/redstone-region stats [limit]",                 "top-N chunks les plus chers en redstone");
+        helpLine(s, "/redstone-region stats reset",                   "vide les compteurs de timing");
+        helpLine(s, "/redstone-region check",                         "scanne le chunk pour patterns piston/observer suspects");
+        helpLine(s, "/redstone-region selection <mode>",              "applique <mode> à la selection WorldEdit du joueur");
         s.sendMessage(Component.empty());
         s.sendMessage(Component.text("modes:", NamedTextColor.AQUA));
         s.sendMessage(Component.text("  vanilla            ", NamedTextColor.GRAY).append(Component.text("comportement Mojang strict, toutes les contraptions marchent", NamedTextColor.WHITE)));
         s.sendMessage(Component.text("  alternate-current  ", NamedTextColor.GRAY).append(Component.text("BFS + single-write, plus rapide mais quelques edge cases (cf. ci-dessous)", NamedTextColor.WHITE)));
+        s.sendMessage(Component.text("  eigencraft         ", NamedTextColor.GRAY).append(Component.text("RedstoneWireTurbo (theosib), 3-5× plus rapide, meilleure compat que AC", NamedTextColor.WHITE)));
+        s.sendMessage(Component.text("  disabled           ", NamedTextColor.GRAY).append(Component.text("le wire ne tick plus du tout, état figé (archive zone)", NamedTextColor.WHITE)));
         s.sendMessage(Component.empty());
         s.sendMessage(Component.text("edge cases qui ne marchent QU'EN vanilla:", NamedTextColor.YELLOW));
         s.sendMessage(Component.text("  • piston BUD via self-shape-update du wire (un palier intermédiaire est skippé en AC)", NamedTextColor.WHITE));
@@ -255,6 +271,125 @@ public final class RedstoneRegionCommand {
         return 1;
     }
 
+    private static int stats(CommandContext<CommandSourceStack> ctx, int limit) {
+        var src = ctx.getSource();
+        if (TIMING == null) {
+            src.getSender().sendMessage(Component.text("timing table unavailable", NamedTextColor.RED));
+            return 0;
+        }
+        var top = TIMING.top(limit);
+        src.getSender().sendMessage(Component.text("=== Top " + top.size() + " hottest chunks (by total redstone time) ===", NamedTextColor.GOLD));
+        if (top.isEmpty()) {
+            src.getSender().sendMessage(Component.text("no recorded redstone activity yet — toggle a lever first", NamedTextColor.GRAY));
+            return 0;
+        }
+        int i = 0;
+        for (var hot : top) {
+            i++;
+            String dim = hot.dim();
+            var cell = hot.cell();
+            src.getSender().sendMessage(Component.text(
+                    String.format("%2d. %s (%4d, %4d)  count=%5d  avg=%6.2fms  max=%6.2fms  total=%7.0fms",
+                            i, shortDim(dim), hot.cx(), hot.cz(),
+                            cell.count(), cell.avgMs(), cell.maxNs() / 1_000_000.0, cell.totalNs() / 1_000_000.0),
+                    NamedTextColor.AQUA));
+        }
+        return 1;
+    }
+
+    private static String shortDim(String dim) {
+        int slash = dim.indexOf(':');
+        return slash >= 0 ? dim.substring(slash + 1) : dim;
+    }
+
+    private static int statsReset(CommandContext<CommandSourceStack> ctx) {
+        if (TIMING != null) TIMING.resetAll();
+        ctx.getSource().getSender().sendMessage(Component.text("timing table cleared", NamedTextColor.GREEN));
+        return 1;
+    }
+
+    private static int check(CommandContext<CommandSourceStack> ctx, ChunkRegistry registry) {
+        var src = ctx.getSource();
+        Entity executor = src.getExecutor();
+        if (executor == null) {
+            src.getSender().sendMessage(Component.text("must be run by an entity", NamedTextColor.RED));
+            return 0;
+        }
+        Chunk c = executor.getLocation().getChunk();
+        World w = executor.getWorld();
+        var sender = src.getSender();
+        sender.sendMessage(Component.text("=== AC compatibility check (chunk " + c.getX() + "," + c.getZ() + ") ===", NamedTextColor.GOLD));
+        // Sample blocks for piston / observer / sticky-piston / wire mix
+        int pistons = 0, stickies = 0, observers = 0, dust = 0, repeaters = 0, comparators = 0;
+        int bx = c.getX() << 4, bz = c.getZ() << 4;
+        int yMin = w.getMinHeight(), yMax = w.getMaxHeight();
+        for (int x = bx; x < bx + 16; x++) {
+            for (int z = bz; z < bz + 16; z++) {
+                for (int y = yMin; y < yMax; y++) {
+                    var t = w.getBlockAt(x, y, z).getType();
+                    switch (t) {
+                        case PISTON:        pistons++;     break;
+                        case STICKY_PISTON: stickies++;    break;
+                        case OBSERVER:      observers++;   break;
+                        case REDSTONE_WIRE: dust++;        break;
+                        case REPEATER:      repeaters++;   break;
+                        case COMPARATOR:    comparators++; break;
+                        default:                           break;
+                    }
+                }
+            }
+        }
+        sender.sendMessage(Component.text(
+                "  dust=" + dust + "  repeaters=" + repeaters + "  comparators=" + comparators
+                        + "  pistons=" + pistons + "  sticky=" + stickies + "  observers=" + observers,
+                NamedTextColor.AQUA));
+        boolean risky = (pistons + stickies > 0 && observers > 0)
+                     || (pistons + stickies > 0 && dust > 8);
+        if (risky) {
+            sender.sendMessage(Component.text(
+                    "⚠ Potentially incompatible with Alternate Current: piston/observer/dust mix detected.",
+                    NamedTextColor.YELLOW));
+            sender.sendMessage(Component.text("  Pistons relying on quasi-connectivity from a wire's self-shape-update", NamedTextColor.GRAY));
+            sender.sendMessage(Component.text("  may not fire under AC. Consider keeping this chunk vanilla, or test in a copy.", NamedTextColor.GRAY));
+        } else if (dust > 0) {
+            sender.sendMessage(Component.text("✓ Looks AC-friendly (dust-heavy, no risky piston/observer mix)", NamedTextColor.GREEN));
+        } else {
+            sender.sendMessage(Component.text("(no redstone components detected — AC vs vanilla is moot here)", NamedTextColor.GRAY));
+        }
+        return 1;
+    }
+
+    private static int selection(CommandContext<CommandSourceStack> ctx, ChunkRegistry registry) {
+        var src = ctx.getSource();
+        Entity executor = src.getExecutor();
+        if (!(executor instanceof org.bukkit.entity.Player p)) {
+            src.getSender().sendMessage(Component.text("must be run by a player (uses your WorldEdit selection)", NamedTextColor.RED));
+            return 0;
+        }
+        if (!Bukkit.getPluginManager().isPluginEnabled("WorldEdit")
+                && !Bukkit.getPluginManager().isPluginEnabled("FastAsyncWorldEdit")) {
+            src.getSender().sendMessage(Component.text("WorldEdit / FAWE not installed", NamedTextColor.RED));
+            return 0;
+        }
+        String modeStr = StringArgumentType.getString(ctx, "mode");
+        RedstoneMode mode = RedstoneMode.parse(modeStr);
+        if (mode == null) {
+            src.getSender().sendMessage(Component.text("unknown mode: " + modeStr, NamedTextColor.RED));
+            return 0;
+        }
+        var result = net.ekaii.redstone.region.bridge.WorldEditBridge.collectSelectionChunks(p);
+        if (!result.ok()) {
+            src.getSender().sendMessage(Component.text("[WE] " + result.message(), NamedTextColor.YELLOW));
+            return 0;
+        }
+        for (long[] xz : result.chunks()) {
+            applyChunk(p.getWorld(), (int) xz[0], (int) xz[1], mode, registry, p, "we-selection");
+        }
+        src.getSender().sendMessage(Component.text("→ " + mode.slug() + " for "
+                + result.chunks().size() + " chunks (WE selection)", NamedTextColor.GREEN));
+        return result.chunks().size();
+    }
+
     private static int list(CommandContext<CommandSourceStack> ctx, ChunkRegistry registry) {
         var src = ctx.getSource();
         for (World w : Bukkit.getWorlds()) {
@@ -267,14 +402,30 @@ public final class RedstoneRegionCommand {
     }
 
     private static void applyChunk(World w, int x, int z, RedstoneMode mode, ChunkRegistry registry) {
+        applyChunk(w, x, z, mode, registry, null, "command");
+    }
+
+    private static void applyChunk(World w, int x, int z, RedstoneMode mode, ChunkRegistry registry,
+                                   org.bukkit.command.CommandSender actor, String reason) {
         ResourceKey<Level> dim = ((CraftWorld) w).getHandle().dimension();
+        RedstoneMode prev = registry.modeOfChunk(dim, x, z);
         registry.setMode(dim, x, z, mode);
-        // Persist by writing the PDC on the owning region thread.
         var scheduler = Bukkit.getRegionScheduler();
-        scheduler.execute(/* plugin */ pluginRef(), w, x, z, () -> {
+        scheduler.execute(pluginRef(), w, x, z, () -> {
             Chunk c = w.getChunkAt(x, z);
             ChunkPdcCodec.write(c, mode);
         });
+        if (prev != mode) {
+            if (AUDIT != null) {
+                net.ekaii.redstone.region.audit.AuditLog.Source src =
+                        "we-selection".equals(reason) ? net.ekaii.redstone.region.audit.AuditLog.Source.WORLDEDIT
+                                                      : net.ekaii.redstone.region.audit.AuditLog.Source.COMMAND;
+                var ev = AUDIT.makeEvent(src, actor, dim.identifier().toString(), x, z, prev, mode, reason);
+                AUDIT.record(ev);
+                if (DISCORD != null) DISCORD.send(ev);
+            }
+            if (BLUE_MAP != null) BLUE_MAP.setMode(w.getName(), x, z, mode);
+        }
     }
 
     private static int applyArea(World w, int cx, int cz, int radius, RedstoneMode mode, ChunkRegistry registry) {
@@ -288,9 +439,27 @@ public final class RedstoneRegionCommand {
         return n;
     }
 
-    /* Plugin reference is injected at registration time by PluginMain. */
+    /* Plugin context injected at registration time by PluginMain. */
     private static volatile org.bukkit.plugin.Plugin PLUGIN;
-    public static void bindPlugin(org.bukkit.plugin.Plugin plugin) { PLUGIN = plugin; }
+    private static volatile net.ekaii.redstone.region.audit.AuditLog AUDIT;
+    private static volatile net.ekaii.redstone.region.timing.ChunkTimingTable TIMING;
+    private static volatile net.ekaii.redstone.region.bridge.DiscordWebhook DISCORD;
+    private static volatile net.ekaii.redstone.region.config.PluginConfig CFG;
+    private static volatile net.ekaii.redstone.region.bridge.BlueMapBridge BLUE_MAP;
+
+    public static void bindContext(org.bukkit.plugin.Plugin plugin,
+                                   net.ekaii.redstone.region.audit.AuditLog audit,
+                                   net.ekaii.redstone.region.timing.ChunkTimingTable timing,
+                                   net.ekaii.redstone.region.bridge.DiscordWebhook discord,
+                                   net.ekaii.redstone.region.config.PluginConfig cfg,
+                                   net.ekaii.redstone.region.bridge.BlueMapBridge blueMap) {
+        PLUGIN = plugin;
+        AUDIT = audit;
+        TIMING = timing;
+        DISCORD = discord;
+        CFG = cfg;
+        BLUE_MAP = blueMap;
+    }
     private static org.bukkit.plugin.Plugin pluginRef() {
         var p = PLUGIN;
         if (p == null) throw new IllegalStateException("RedstoneRegionCommand not bound to plugin");

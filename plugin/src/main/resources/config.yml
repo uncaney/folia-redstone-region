@@ -1,0 +1,53 @@
+# folia-redstone-region — runtime configuration
+# This file is created on first run; edits require a server restart.
+
+# Default mode for chunks that have no PDC entry. Values:
+#   vanilla, alternate-current, eigencraft, disabled
+default-mode: vanilla
+
+# === Sign opt-in ===
+sign:
+  enabled: true
+  # Cap on the radius any [ac]/[vanilla]/etc. sign can apply, in chunks.
+  # 0 = sign affects only its own chunk; 8 = a 17×17 chunk square; etc.
+  max-radius: 4
+  # Permission to flip via sign. Default 'op' = only operators.
+  permission: redstone-region.sign
+
+# === Audit log ===
+audit:
+  enabled: true
+  # JSONL file under plugins/folia-redstone-region/. Rolled at midnight.
+  path: audit.jsonl
+  # Roll daily; keep N rolled files.
+  rotate-keep: 14
+
+# === Auto-AC threshold ===
+auto-ac:
+  enabled: false
+  # Tick interval at which the scanner runs (game ticks).
+  scan-interval-ticks: 200
+  # If a chunk's average ms-per-update exceeds this threshold AND it's still
+  # in vanilla, flip it to alternate-current automatically.
+  ms-per-update-threshold: 4.0
+  # Minimum sample count before considering a chunk for auto-flip.
+  min-samples: 50
+  # If true, also auto-revert AC chunks whose ms-per-update drops below
+  # half the threshold for a sustained period (i.e. low traffic).
+  auto-revert: false
+
+# === AC update order ===
+alternate-current:
+  # Default update order applied to every AC-chunk if not overridden per-chunk.
+  # Values: horizontal-first-outward, horizontal-first-inward,
+  #         vertical-first-outward,   vertical-first-inward
+  default-update-order: horizontal-first-outward
+
+# === Discord webhook on flip ===
+discord:
+  enabled: false
+  # Discord webhook URL; leave empty to disable even if enabled=true.
+  webhook-url: ""
+  # Minimum severity to broadcast: 'all' (every flip), 'manual' (only player
+  # commands, skip auto-AC), 'audit' (only sign + auto-AC).
+  filter: all

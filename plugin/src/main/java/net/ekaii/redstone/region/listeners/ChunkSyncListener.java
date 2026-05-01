@@ -21,9 +21,12 @@ import org.bukkit.event.world.WorldUnloadEvent;
 public final class ChunkSyncListener implements Listener {
 
     private final ChunkRegistry registry;
+    private final net.ekaii.redstone.region.bridge.BlueMapBridge blueMap;
 
-    public ChunkSyncListener(ChunkRegistry registry) {
+    public ChunkSyncListener(ChunkRegistry registry,
+                             net.ekaii.redstone.region.bridge.BlueMapBridge blueMap) {
         this.registry = registry;
+        this.blueMap = blueMap;
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -34,6 +37,7 @@ public final class ChunkSyncListener implements Listener {
             registry.setMode(
                     ((CraftWorld) c.getWorld()).getHandle().dimension(),
                     c.getX(), c.getZ(), mode);
+            if (blueMap != null) blueMap.setMode(c.getWorld().getName(), c.getX(), c.getZ(), mode);
         }
     }
 

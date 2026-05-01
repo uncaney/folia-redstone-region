@@ -58,8 +58,11 @@ public final class EvaluatorSwap {
             return;
         }
         ORIGINAL = current;
-        AcRedstoneWireEvaluator ac = new AcRedstoneWireEvaluator(wire);
-        DispatchingEvaluator dispatcher = new DispatchingEvaluator(wire, current, ac, registry);
+        AcRedstoneWireEvaluator ac    = new AcRedstoneWireEvaluator(wire);
+        EigencraftWireEvaluator eig   = new EigencraftWireEvaluator(wire);
+        DisabledWireEvaluator off     = new DisabledWireEvaluator(wire);
+        DispatchingEvaluator dispatcher =
+                new DispatchingEvaluator(wire, current, ac, eig, off, registry);
         f.set(wire, dispatcher);
         INSTALLED = dispatcher;
         log.info("redstone evaluator swapped: " + current.getClass().getName()
@@ -84,4 +87,5 @@ public final class EvaluatorSwap {
     }
 
     public static boolean isInstalled() { return INSTALLED != null; }
+    public static DispatchingEvaluator installedDispatcher() { return INSTALLED; }
 }
