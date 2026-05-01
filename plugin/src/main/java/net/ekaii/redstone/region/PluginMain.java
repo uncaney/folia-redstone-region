@@ -8,6 +8,7 @@ import net.ekaii.redstone.region.bridge.PlaceholderApiBridge;
 import net.ekaii.redstone.region.cmd.RedstoneRegionCommand;
 import net.ekaii.redstone.region.config.ChunkRegistry;
 import net.ekaii.redstone.region.config.PluginConfig;
+import net.ekaii.redstone.region.i18n.Messages;
 import net.ekaii.redstone.region.listeners.ChunkSyncListener;
 import net.ekaii.redstone.region.listeners.SignOptInListener;
 import net.ekaii.redstone.region.nms.DispatchingEvaluator;
@@ -32,6 +33,8 @@ public final class PluginMain extends JavaPlugin {
     public void onEnable() {
         Logger log = getLogger();
         this.config = PluginConfig.load(this);
+        // Load language file before any user-facing message goes out.
+        Messages.reload(this, config.language, log);
 
         // 1. Force Paper's redstone-impl to VANILLA so our evaluator is the only one called.
         PaperConfigForcer forcer = new PaperConfigForcer(log);
@@ -94,8 +97,8 @@ public final class PluginMain extends JavaPlugin {
             }
         }
 
-        // 10. Bind plugin reference + integrations for region-scheduled PDC writes from commands.
-        RedstoneRegionCommand.bindContext(this, auditLog, timing, discord, config, blueMap);
+        // 10. Bind plugin reference + integrations + reload hook for the command tree.
+        RedstoneRegionCommand.bindContext(this, auditLog, timing, discord, config, blueMap, this::reloadPluginConfig);
 
         log.info("folia-redstone-region " + getPluginMeta().getVersion() + " ready"
                 + (config.signEnabled ? " (sign-opt-in radius<=" + config.signMaxRadius + ")" : "")
@@ -119,4 +122,31 @@ public final class PluginMain extends JavaPlugin {
     public PluginConfig pluginConfig() { return config; }
     public AuditLog auditLog()         { return auditLog; }
     public ChunkTimingTable timing()    { return timing; }
+
+    /**
+     * Live reload triggered by /redstone-region reload. Re-reads config.yml,
+     * reloads the i18n message bundle, and refreshes the Discord webhook URL
+     * (without restarting the worker). The NMS evaluator swap and the
+     * ChunkRegistry are NOT touched — those persist for the JVM's lifetime.
+     *
+     * <p>Returns the new language code so the command can echo it back.
+     */
+    public String reloadPluginConfig() {
+        Logger log = getLogger();
+        // Re-read config.yml from disk
+        this.config = PluginConfig.load(this);
+        // Reload language bundle
+        Messages.reload(this, config.language, log);
+        // Recreate Discord webhook with potentially new URL/filter
+        if (discord != null) discord.close();
+        this.discord = new net.ekaii.redstone.region.bridge.DiscordWebhook(
+                config.discordEnabled, config.discordWebhookUrl, config.discordFilter, log);
+        // Re-bind only the reloadable references in the command tree
+        RedstoneRegionCommand.rebindContextLight(auditLog, discord, config);
+        log.info("config reloaded — language=" + config.language
+                + ", sign=" + config.signEnabled
+                + ", auto-ac=" + config.autoAcEnabled
+                + ", discord=" + config.discordEnabled);
+        return config.language;
+    }
 }

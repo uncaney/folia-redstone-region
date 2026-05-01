@@ -6,6 +6,7 @@ import org.bukkit.plugin.Plugin;
 /** Strongly-typed view over the plugin's config.yml. Loaded once at enable. */
 public final class PluginConfig {
 
+    public final String language;
     public final RedstoneMode defaultMode;
     public final boolean signEnabled;
     public final int signMaxRadius;
@@ -28,6 +29,7 @@ public final class PluginConfig {
     public final String discordFilter;
 
     private PluginConfig(FileConfiguration c) {
+        this.language = c.getString("language", "en");
         this.defaultMode = orDefault(RedstoneMode.parse(c.getString("default-mode", "vanilla")), RedstoneMode.VANILLA);
 
         this.signEnabled       = c.getBoolean("sign.enabled", true);

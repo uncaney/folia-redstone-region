@@ -1,5 +1,11 @@
 # folia-redstone-region — runtime configuration
-# This file is created on first run; edits require a server restart.
+# This file is created on first run; most edits take effect on /redstone-region reload.
+
+# === Language ===
+# Player-facing chat messages. Available: en, fr.
+# To add a new language, drop plugins/folia-redstone-region/lang/<code>.yml
+# (any file there overrides the bundled one).
+language: en
 
 # Default mode for chunks that have no PDC entry. Values:
 #   vanilla, alternate-current, eigencraft, disabled

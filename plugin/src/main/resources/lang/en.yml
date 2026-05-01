@@ -1,0 +1,133 @@
+# English language file for folia-redstone-region.
+# Placeholders are wrapped in {curly-braces}.
+# Color/format codes use Bukkit § convention (e.g. §a green, §c red, §6 gold,
+# §7 gray, §8 dark-gray, §b aqua, §e yellow). Reset = §r.
+
+prefix: "§8[§credstone-region§8] §r"
+
+# === error / generic ===
+error.must-be-entity: "§cThis command must be run by a player or entity."
+error.unknown-mode: "§cUnknown mode: §f{mode}§c. Modes: vanilla, alternate-current, eigencraft, disabled."
+error.no-permission: "§cMissing permission §f{perm}§c."
+error.we-not-installed: "§cWorldEdit / FAWE is not installed on this server."
+error.we-no-selection: "§eNo WorldEdit selection — set §f//pos1§e and §f//pos2§e first."
+error.we-incomplete: "§eYour WorldEdit selection is incomplete (missing one of the corners)."
+error.we-wrong-world: "§eSelection is in world §f{we-world}§e but you are in §f{your-world}§e."
+error.we-error: "§cWorldEdit error: §f{detail}"
+error.timing-unavailable: "§cTiming table is not available."
+
+# === /info ===
+info.chunk-uses: "§7Chunk §b{chunk}§7 in §b{dim}§7 uses §f{mode}§7."
+
+# === /set, /fill, /clear ===
+set.applied: "§a→ §f{mode}§a for chunk §b{chunk}§a."
+fill.applied: "§a→ §f{mode}§a for §f{n}§a chunks."
+clear.applied-one: "§a→ §fvanilla§a for chunk §b{chunk}§a."
+clear.applied-area: "§a→ §fvanilla§a for §f{n}§a chunks."
+
+# === /list ===
+list.line: "§b{dim}§7: §f{n}§7 non-vanilla chunks"
+list.line-empty: "§8{dim}: 0 non-vanilla chunks"
+
+# === /where ===
+where.header: "§6═══ Non-vanilla chunks in §e{dim}§6 (§e{n}§6) ═══"
+where.empty: "§8(none — every chunk is vanilla)"
+where.line: "§b  chunk {chunk}  §7→§b  blocks ({wx1}..{wx2}, {wz1}..{wz2})  §8[click to /tp]"
+where.truncated: "§8  … {n} more (truncated)"
+
+# === /map ===
+map.header: "§6═══ Map @ chunk §e{chunk}§6 radius=§e{r}§6 ═══"
+map.legend: "§7█ AC   §9█ eigencraft   §c█ disabled   §8· vanilla   §e◉ you"
+map.footer: "§7  1 char = 1 chunk (16 blocks); covers ±{blocks} blocks."
+
+# === /stats ===
+stats.header: "§6═══ Top {n} hottest chunks (by total redstone time) ═══"
+stats.no-activity: "§7No redstone activity recorded yet — toggle a lever, then re-run /stats."
+stats.column-header: "§8  #   world         chunk(cx,cz)        block-bounds (x..x, z..z)            count    avg     max      total"
+stats.row: "§b  {i}. §f{dim} §b{chunk}  §7blocks ({wx1}..{wx2}, {wz1}..{wz2})  §f{count} §7updates  avg=§f{avg}§7  max=§f{max}§7  total=§f{total} §8[click to /tp]"
+stats.legend: "§8  count = recomputes; avg = mean per recompute; max = worst single recompute; total = cumulative."
+stats.reset-ok: "§aTiming table cleared."
+
+# === /check ===
+check.header: "§6═══ AC compatibility check (chunk {chunk}) ═══"
+check.counts: "§b  dust=§f{dust}§b  repeaters=§f{rep}§b  comparators=§f{comp}§b  pistons=§f{piston}§b  sticky=§f{sticky}§b  observers=§f{obs}"
+check.risky: "§e⚠ Potentially incompatible with Alternate Current: piston/observer/dust mix detected."
+check.risky-detail: "§7  Pistons relying on quasi-connectivity from a wire's self-shape-update may not fire under AC."
+check.risky-advice: "§7  Consider keeping this chunk vanilla, or test in a copy first."
+check.safe: "§a✓ Looks AC-friendly (dust-heavy, no risky piston/observer mix)."
+check.empty: "§8(no redstone components detected — AC vs vanilla is moot here)"
+
+# === /selection ===
+selection.applied: "§a→ §f{mode}§a for §f{n}§a chunks (WorldEdit selection)."
+
+# === /profile ===
+profile.header: "§6═══ Profile @ §e{dim}§6 chunk §e{chunk}§6 ═══"
+profile.bounds: "§8  block-bounds: ({wx1}..{wx2}, {wz1}..{wz2})    full Y range: {ymin}..{ymax}  §7[click to /tp]"
+profile.mode-line: "§7  current mode:  §f{mode-colored}§8    ({total} non-vanilla chunks in this dim)"
+profile.components-header: "§b  ── Components ──"
+profile.components-1: "§f  dust=§b{dust}§f  repeaters=§b{rep}§f  comparators=§b{comp}§f  pistons=§b{piston}§f  sticky=§b{sticky}§f  observers=§b{obs}"
+profile.components-2: "§f  sources(lever/button/red-block)=§b{sources}§f  lamps=§b{lamps}§f  torches=§b{torches}"
+profile.timing-header: "§b  ── Timing (since plugin start / last /stats reset) ──"
+profile.timing-empty: "§7  No redstone updates recorded yet — toggle a lever, then /profile again."
+profile.timing-row: "§f  updates=§b{count}§f   total=§b{total}§f   avg=§b{avg}§f/update   worst=§b{worst}§f/update"
+profile.timing-pct: "§7  → 1 typical update consumes ~§f{pct-avg}%§7 of a server tick (50 ms budget); worst was §f{pct-worst}%§7."
+profile.reco-header: "§b  ── Recommendation ──"
+profile.reco-hint: "§8  Try: /redstone-region set <mode>, then re-run /profile to compare."
+
+reco.frozen: "§eℹ This chunk is FROZEN — wire never updates. /set vanilla|alternate-current to thaw."
+reco.vanilla.hot-friendly: "§a✓ Hot chunk + dust-friendly. Switching to alternate-current is recommended (avg {avg} > 4 ms)."
+reco.vanilla.hot-risky: "§e⚠ Hot AND risky (piston+observer/dust mix). Try eigencraft first — milder edge cases than AC."
+reco.vanilla.mid-dust: "§a✓ Mid-hot dust-heavy. alternate-current likely 2-5× faster here."
+reco.vanilla.mid-risky: "§b→ Mildly hot + risky. eigencraft is the safe perf upgrade for this build."
+reco.vanilla.no-redstone: "§8(no redstone here — no recommendation)"
+reco.vanilla.fast: "§a✓ Currently fast enough. Keep vanilla unless you measure a problem."
+reco.ac.risky: "§e⚠ AC chunk with piston+observer mix — verify your build still works (self-shape-update edge case)."
+reco.ac.fast: "§a✓ AC is doing its job — avg {avg} is well below 1 ms/update."
+reco.ac.default: "§a✓ alternate-current active. Run /redstone-region check to confirm no risky patterns."
+reco.eigen.still-hot: "§b→ Still hot under eigencraft. alternate-current usually 2× faster but check edge cases first."
+reco.eigen.default: "§a✓ eigencraft active. Good middle ground if AC was breaking things."
+
+# === sign opt-in ===
+sign.applied: "§a[redstone-region] sign → §f{n}§a chunks set to §f{mode}§a (radius={r}, cap={cap})."
+sign.line.applied: "[{mode}]"
+sign.line.radius: "r={r}"
+sign.line.count: "{n} chunks"
+sign.line.author: "by {author}"
+
+# === /reload ===
+reload.ok: "§a[redstone-region] config + language reloaded (lang=§f{lang}§a). NMS evaluator swap unchanged — restart server for code changes."
+reload.error: "§c[redstone-region] reload failed: §f{detail}"
+
+# === /help ===
+help.header: "§6═══ /redstone-region ═══"
+help.intro: "§7Choose the redstone algorithm per chunk: vanilla (Mojang), alternate-current (~3-15× faster on dust), eigencraft (3-5× faster, milder edge cases), or disabled (frozen)."
+help.cmd-info: "§a/redstone-region info §f— mode of the chunk you're in"
+help.cmd-set: "§a/redstone-region set <mode> §f— apply <mode> to current chunk"
+help.cmd-fill: "§a/redstone-region fill <radius> <mode> §f— apply to a (2r+1)×(2r+1) chunk square (r ≤ 32)"
+help.cmd-clear: "§a/redstone-region clear [radius] §f— reset to vanilla (single chunk or area)"
+help.cmd-list: "§a/redstone-region list §f— count non-vanilla chunks per dimension"
+help.cmd-where: "§a/redstone-region where §f— detailed list of non-vanilla chunks (clickable to /tp)"
+help.cmd-map: "§a/redstone-region map [radius] §f— ASCII mini-map (default radius 8 = 17×17 chunks)"
+help.cmd-stats: "§a/redstone-region stats [limit] §f— top-N hottest chunks (clickable to /tp)"
+help.cmd-stats-reset: "§a/redstone-region stats reset §f— clear timing counters"
+help.cmd-check: "§a/redstone-region check §f— scan for piston/observer patterns risky under AC"
+help.cmd-profile: "§a/redstone-region profile §f— full chunk diagnostic + recommendation"
+help.cmd-selection: "§a/redstone-region selection <mode> §f— apply to your WorldEdit selection"
+help.cmd-reload: "§a/redstone-region reload §f— reload config + language without restart"
+help.modes-header: "§bModes:"
+help.mode-vanilla: "§7  vanilla            §fstrict Mojang behaviour, every contraption works"
+help.mode-ac: "§7  alternate-current  §fBFS + single-write, faster but a few edge cases"
+help.mode-eigen: "§7  eigencraft         §fRedstoneWireTurbo (theosib), 3-5× faster, better compat"
+help.mode-disabled: "§7  disabled           §fwire never ticks, frozen state (archive zone)"
+help.edges-header: "§eEdge cases that only work in vanilla:"
+help.edge-1: "§f  • piston BUD via wire's self-shape-update (intermediate level skipped under AC)"
+help.edge-2: "§f  • observer watching a wire and counting power-level intermediates"
+help.edge-3: "§f  • strict MC-11193 update order (rare; only ultra-precise designs care)"
+help.advice: "§7Tip: keep the world vanilla by default, mark AC only on dust-heavy zones (sorters, mega-bases, big chest rooms). Avoid AC on mixed piston+observer machines."
+help.example-header: "§bExample:"
+help.example-1: "§7  /redstone-region fill 8 alternate-current §f— 17×17 chunks around you in AC"
+help.example-2: "§7  /redstone-region info §f— verify the chunk you're standing on"
+help.example-3: "§7  /redstone-region clear 8 §f— back to vanilla"
+
+# === [click to /tp] tooltips ===
+tp.hover: "§7Click to teleport to chunk center"
