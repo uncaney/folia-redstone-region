@@ -1,0 +1,59 @@
+name: Bug report
+description: Something is broken or behaves unexpectedly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill in the fields
+        below so we can reproduce and fix it. Security issues should be
+        emailed instead — see `SECURITY.md`.
+
+  - type: input
+    id: server
+    attributes:
+      label: Server software + version
+      placeholder: "Folia 1.21.11 build #6 (or Luminol 1.21.11-8b41a91, etc.)"
+    validations:
+      required: true
+
+  - type: input
+    id: plugin
+    attributes:
+      label: folia-redstone-region version
+      placeholder: "0.1.0 (commit hash if dev build)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What did you do, what did you expect, what happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: |
+        Ideally, the smallest sequence of `/redstone-region …` commands +
+        a description of any redstone build needed.
+    validations:
+      required: true
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Server log excerpt
+      description: |
+        Paste any relevant lines from `logs/latest.log`. If a stack trace is
+        present, include all of it.
+      render: text
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Other plugins installed, BlueMap version, etc.

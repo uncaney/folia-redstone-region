@@ -1,0 +1,34 @@
+name: Feature request
+description: Suggest an improvement
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's the underlying problem?
+      description: |
+        Don't lead with the solution — describe the user-visible problem you
+        hit. (e.g. "I want to keep auto-AC off but still see /stats" — that's
+        a problem; "add a config flag" is a solution.)
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Suggested solution
+      description: How would you like it to work?
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+
+  - type: dropdown
+    id: tier
+    attributes:
+      label: How important is this for you?
+      options:
+        - "Nice to have"
+        - "Would use it regularly"
+        - "Blocker — I can't ship without it"

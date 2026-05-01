@@ -1,0 +1,5 @@
+# Default owner for any file in the repo
+*           @uncaney
+
+# Vendored third-party code — preserve upstream attribution
+plugin/src/main/java/net/ekaii/redstone/region/ac/  @uncaney
