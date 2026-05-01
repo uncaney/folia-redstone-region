@@ -19,6 +19,14 @@ import java.util.concurrent.atomic.LongAdder;
  */
 public final class ChunkTimingTable {
 
+    /**
+     * Soft cap on total tracked cells across all dimensions. When exceeded,
+     * the lowest-totalNs entries are evicted in batches. Prevents unbounded
+     * growth on long-lived servers that visit many chunks.
+     */
+    private static final int CELL_SOFT_CAP = 10_000;
+
+
     public static final class Cell {
         final LongAdder count = new LongAdder();
         final LongAdder totalNs = new LongAdder();
@@ -45,7 +53,29 @@ public final class ChunkTimingTable {
     public void record(String dim, int chunkX, int chunkZ, long ns) {
         Map<Long, Cell> m = byDim.computeIfAbsent(dim, k -> new ConcurrentHashMap<>());
         long key = ChunkKey.pack(chunkX, chunkZ);
-        m.computeIfAbsent(key, k -> new Cell()).record(ns);
+        m.computeIfAbsent(key, k -> {
+            // Lazy eviction check on insert — cheap, runs only when adding a new cell
+            maybeEvictColdest();
+            return new Cell();
+        }).record(ns);
+    }
+
+    /** Crude LRU-ish: when over cap, drop the 25% lowest-totalNs cells. */
+    private void maybeEvictColdest() {
+        int total = 0;
+        for (Map<Long, Cell> m : byDim.values()) total += m.size();
+        if (total <= CELL_SOFT_CAP) return;
+        // collect all cells, sort by totalNs ascending, drop first 25%
+        List<Object[]> all = new ArrayList<>(total);
+        for (var e : byDim.entrySet())
+            for (var c : e.getValue().entrySet())
+                all.add(new Object[]{ e.getKey(), c.getKey(), c.getValue().totalNs() });
+        all.sort(Comparator.comparingLong(o -> (long) o[2]));
+        int toDrop = total / 4;
+        for (int i = 0; i < toDrop && i < all.size(); i++) {
+            Map<Long, Cell> m = byDim.get((String) all.get(i)[0]);
+            if (m != null) m.remove((long) all.get(i)[1]);
+        }
     }
 
     public Cell get(String dim, int chunkX, int chunkZ) {

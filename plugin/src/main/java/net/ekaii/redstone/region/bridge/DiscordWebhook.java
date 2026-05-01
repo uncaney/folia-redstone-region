@@ -48,11 +48,18 @@ public final class DiscordWebhook {
         if (this.enabled) this.worker.start();
     }
 
+    /** Cap on the queue to avoid unbounded growth under sustained burst. */
+    private static final int MAX_QUEUE_SIZE = 1024;
+
     public void send(AuditLog.Event ev) {
         if (!enabled || disabled) return;
         if (filter.equalsIgnoreCase("manual") && ev.source() != AuditLog.Source.COMMAND
                 && ev.source() != AuditLog.Source.WORLDEDIT) return;
         if (filter.equalsIgnoreCase("audit") && ev.source() == AuditLog.Source.COMMAND) return;
+        // Bound the queue: drop oldest if we hit the cap
+        while (queue.size() >= MAX_QUEUE_SIZE) {
+            queue.poll();
+        }
         String payload = formatPayload(ev);
         queue.add(payload);
         synchronized (queue) { queue.notify(); }

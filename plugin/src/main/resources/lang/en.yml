@@ -94,6 +94,20 @@ sign.line.radius: "r={r}"
 sign.line.count: "{n} chunks"
 sign.line.author: "by {author}"
 
+# === /undo ===
+undo.nothing: "§7Nothing to undo."
+undo.world-gone: "§eThe last batch was in world §f{dim}§e but that world is no longer loaded — skipping."
+undo.applied: "§a↶ undone §f{n}§a chunks (originally by §f{actor}§a, reason: {reason})."
+
+# === /why ===
+why.header: "§6═══ Why is the wire @ ({x}, {y}, {z}) §e[{type}]§6 at its current value? ═══"
+why.not-wire-or-source: "§7  This block is not a wire or signal source — power readout n/a."
+why.self-power: "§7  current self power: §f{power}"
+why.neighbor: "§7  {dir}: §f{type}{suffix}"
+why.max: "§7  → max neighbor contribution: §f{power}§7 from §f{dir}"
+why.discrepancy: "§e  ⚠ self={self} but max neighbor contribution = {max}. Likely a transient: re-run after one tick, or a strong-power source is reaching here through a conductor."
+why.consistent: "§a  ✓ self power is consistent with the strongest neighbor contribution (no anomaly)."
+
 # === /reload ===
 reload.ok: "§a[redstone-region] config + language reloaded (lang=§f{lang}§a). NMS evaluator swap unchanged — restart server for code changes."
 reload.error: "§c[redstone-region] reload failed: §f{detail}"
@@ -114,6 +128,8 @@ help.cmd-check: "§a/redstone-region check §f— scan for piston/observer patte
 help.cmd-profile: "§a/redstone-region profile §f— full chunk diagnostic + recommendation"
 help.cmd-selection: "§a/redstone-region selection <mode> §f— apply to your WorldEdit selection"
 help.cmd-reload: "§a/redstone-region reload §f— reload config + language without restart"
+help.cmd-undo: "§a/redstone-region undo §f— revert your last set/fill/selection batch"
+help.cmd-why: "§a/redstone-region why <x> <y> <z> §f— explain a wire's current power level"
 help.modes-header: "§bModes:"
 help.mode-vanilla: "§7  vanilla            §fstrict Mojang behaviour, every contraption works"
 help.mode-ac: "§7  alternate-current  §fBFS + single-write, faster but a few edge cases"

@@ -100,6 +100,23 @@ public final class PluginMain extends JavaPlugin {
         // 10. Bind plugin reference + integrations + reload hook for the command tree.
         RedstoneRegionCommand.bindContext(this, auditLog, timing, discord, config, blueMap, this::reloadPluginConfig);
 
+        // 11. bStats — anonymized usage metrics (mode counts, lang). Bundled + relocated.
+        try {
+            org.bstats.bukkit.Metrics metrics = new org.bstats.bukkit.Metrics(this, 31033);
+            metrics.addCustomChart(new org.bstats.charts.SimplePie("language", () -> config.language));
+            metrics.addCustomChart(new org.bstats.charts.SimplePie("default_mode", () -> config.defaultMode.slug()));
+            metrics.addCustomChart(new org.bstats.charts.SimplePie("sign_enabled", () -> String.valueOf(config.signEnabled)));
+            metrics.addCustomChart(new org.bstats.charts.SimplePie("auto_ac_enabled", () -> String.valueOf(config.autoAcEnabled)));
+            metrics.addCustomChart(new org.bstats.charts.SimplePie("discord_enabled", () -> String.valueOf(config.discordEnabled)));
+            metrics.addCustomChart(new org.bstats.charts.SingleLineChart("non_vanilla_chunks", () -> {
+                int total = 0;
+                for (org.bukkit.World w : Bukkit.getWorlds()) {
+                    total += ChunkRegistry.get().trackedCount(((org.bukkit.craftbukkit.CraftWorld) w).getHandle().dimension());
+                }
+                return total;
+            }));
+        } catch (Throwable t) { log.fine("bStats init skipped: " + t); }
+
         log.info("folia-redstone-region " + getPluginMeta().getVersion() + " ready"
                 + (config.signEnabled ? " (sign-opt-in radius<=" + config.signMaxRadius + ")" : "")
                 + (config.autoAcEnabled ? " (auto-ac threshold=" + config.autoAcMsThreshold + "ms)" : ""));

@@ -74,6 +74,15 @@ public final class RedstoneRegionCommand {
                         .then(Commands.argument("mode", StringArgumentType.word())
                                 .suggests(RedstoneRegionCommand::suggestModes)
                                 .executes(c -> selection(c, registry))))
+                .then(Commands.literal("undo").executes(c -> undo(c, registry)))
+                .then(Commands.literal("why")
+                        .then(Commands.argument("x", IntegerArgumentType.integer())
+                                .then(Commands.argument("y", IntegerArgumentType.integer())
+                                        .then(Commands.argument("z", IntegerArgumentType.integer())
+                                                .executes(c -> why(c,
+                                                        IntegerArgumentType.getInteger(c, "x"),
+                                                        IntegerArgumentType.getInteger(c, "y"),
+                                                        IntegerArgumentType.getInteger(c, "z")))))))
                 .then(Commands.literal("reload").executes(c -> reload(c)));
     }
 
@@ -98,7 +107,8 @@ public final class RedstoneRegionCommand {
                 "help.cmd-info", "help.cmd-set", "help.cmd-fill", "help.cmd-clear",
                 "help.cmd-list", "help.cmd-where", "help.cmd-map",
                 "help.cmd-stats", "help.cmd-stats-reset", "help.cmd-check",
-                "help.cmd-profile", "help.cmd-selection", "help.cmd-reload"}) {
+                "help.cmd-profile", "help.cmd-selection",
+                "help.cmd-undo", "help.cmd-why", "help.cmd-reload"}) {
             s.sendMessage(msg().tr(k));
         }
         s.sendMessage(Component.empty());
@@ -145,7 +155,13 @@ public final class RedstoneRegionCommand {
         if (mode == null) { src.getSender().sendMessage(msg().tr("error.unknown-mode", "mode", modeStr)); return 0; }
         Chunk chunk = executor.getLocation().getChunk();
         World w = executor.getWorld();
+        ResourceKey<Level> dim = ((CraftWorld) w).getHandle().dimension();
+        RedstoneMode prev = registry.modeOfChunk(dim, chunk.getX(), chunk.getZ());
         applyChunk(w, chunk.getX(), chunk.getZ(), mode, registry, src.getSender(), "command");
+        if (prev != mode) {
+            recordUndo(src.getSender(), dim.identifier().toString(), "command",
+                    java.util.List.of(new UndoBuffer.FlipChange(chunk.getX(), chunk.getZ(), prev, mode)));
+        }
         Component link = msg().chunkLink(w.getName(), chunk.getX(), chunk.getZ());
         src.getSender().sendMessage(msg().trMixed("set.applied", "mode", mode.slug(), "chunk", link));
         return 1;
@@ -227,6 +243,13 @@ public final class RedstoneRegionCommand {
         return keys.length;
     }
 
+    /**
+     * ASCII mini-map. Renders 2 characters per chunk in X (each chunk = "██" / "··"
+     * etc.) so the on-screen aspect ratio matches the world: in MC chat font glyphs
+     * are ~6px wide × ~10px tall, so two horizontal chars per chunk × one line per
+     * chunk gives roughly square cells (~12:10 ≈ 1.2:1) instead of tall rectangles.
+     * North is up (Z decreases northward).
+     */
     private static int map(CommandContext<CommandSourceStack> ctx, ChunkRegistry registry, int radius) {
         var src = ctx.getSource();
         Entity executor = src.getExecutor();
@@ -239,25 +262,44 @@ public final class RedstoneRegionCommand {
         Component chunkLabel = Component.text("(" + cx + ", " + cz + ")");
         sender.sendMessage(msg().trMixed("map.header", "chunk", chunkLabel, "r", String.valueOf(radius)));
         sender.sendMessage(msg().tr("map.legend"));
+
+        // North-up: iterate dz from -radius (north / smaller Z) to +radius (south).
         for (int dz = -radius; dz <= radius; dz++) {
+            int qz = cz + dz;
             Component line = Component.empty();
+            // Add a Z-coord tag every 4 lines for orientation
+            String zTag = (dz % 4 == 0) ? String.format("%5d ", qz << 4) : "      ";
+            line = line.append(Component.text(zTag, NamedTextColor.DARK_GRAY));
             for (int dx = -radius; dx <= radius; dx++) {
-                int qx = cx + dx, qz = cz + dz;
+                int qx = cx + dx;
                 boolean isYou = (dx == 0 && dz == 0);
                 RedstoneMode m = registry.modeOfChunk(dim, qx, qz);
+                String glyph;
+                NamedTextColor color;
                 if (isYou) {
-                    line = line.append(Component.text("◉", NamedTextColor.YELLOW));
-                } else {
-                    line = line.append(switch (m) {
-                        case ALTERNATE_CURRENT -> Component.text("█", NamedTextColor.GREEN);
-                        case EIGENCRAFT        -> Component.text("█", NamedTextColor.AQUA);
-                        case DISABLED          -> Component.text("█", NamedTextColor.RED);
-                        case VANILLA           -> Component.text("·", NamedTextColor.DARK_GRAY);
-                    });
+                    glyph = "◉◉";
+                    color = NamedTextColor.YELLOW;
+                } else switch (m) {
+                    case ALTERNATE_CURRENT: glyph = "██"; color = NamedTextColor.GREEN;     break;
+                    case EIGENCRAFT:        glyph = "██"; color = NamedTextColor.AQUA;      break;
+                    case DISABLED:          glyph = "██"; color = NamedTextColor.RED;       break;
+                    case VANILLA: default:  glyph = "··"; color = NamedTextColor.DARK_GRAY; break;
                 }
+                line = line.append(Component.text(glyph, color));
             }
             sender.sendMessage(line);
         }
+        // Bottom X-coord scale row (block coords every ~4 chunks)
+        StringBuilder scale = new StringBuilder("      ");
+        for (int dx = -radius; dx <= radius; dx++) {
+            if (dx % 4 == 0) {
+                String s = String.valueOf((cx + dx) << 4);
+                if (s.length() > 4) s = s.substring(0, 4);
+                scale.append(String.format("%-8s", s));
+                dx += 3;   // skip ahead (we wrote 8 chars = 4 chunks-worth)
+            }
+        }
+        sender.sendMessage(Component.text(scale.toString(), NamedTextColor.DARK_GRAY));
         sender.sendMessage(msg().tr("map.footer", "blocks", String.valueOf(radius * 16)));
         return 1;
     }
@@ -463,7 +505,6 @@ public final class RedstoneRegionCommand {
         if (mode == null) { src.getSender().sendMessage(msg().tr("error.unknown-mode", "mode", modeStr)); return 0; }
         var result = net.ekaii.redstone.region.bridge.WorldEditBridge.collectSelectionChunks(p);
         if (!result.ok()) {
-            // map status to translation key
             String key = switch (result.status()) {
                 case NO_SELECTION         -> "error.we-no-selection";
                 case INCOMPLETE_SELECTION -> "error.we-incomplete";
@@ -474,9 +515,15 @@ public final class RedstoneRegionCommand {
                     "we-world", "?", "your-world", p.getWorld().getName()));
             return 0;
         }
+        ResourceKey<Level> dim = ((CraftWorld) p.getWorld()).getHandle().dimension();
+        java.util.List<UndoBuffer.FlipChange> batchChanges = new java.util.ArrayList<>();
         for (long[] xz : result.chunks()) {
-            applyChunk(p.getWorld(), (int) xz[0], (int) xz[1], mode, registry, p, "we-selection");
+            int cx = (int) xz[0], cz = (int) xz[1];
+            RedstoneMode prev = registry.modeOfChunk(dim, cx, cz);
+            applyChunk(p.getWorld(), cx, cz, mode, registry, p, "we-selection");
+            if (prev != mode) batchChanges.add(new UndoBuffer.FlipChange(cx, cz, prev, mode));
         }
+        recordUndo(p, dim.identifier().toString(), "we-selection", batchChanges);
         src.getSender().sendMessage(msg().tr("selection.applied", "mode", mode.slug(), "n", String.valueOf(result.chunks().size())));
         return result.chunks().size();
     }
@@ -488,6 +535,122 @@ public final class RedstoneRegionCommand {
      * full restart to truly hot-reload — Java's class-file-redefinition can't
      * undo the field swap once in place).
      */
+    /**
+     * Pop the most recent flip-batch made by the caller (or anyone if op'd) and
+     * reverse every chunk-flip in it. Inverse flips are themselves NOT pushed
+     * onto the undo buffer (no infinite redo loop).
+     */
+    private static int undo(CommandContext<CommandSourceStack> ctx, ChunkRegistry registry) {
+        var src = ctx.getSource();
+        Entity executor = src.getExecutor();
+        java.util.UUID uuid = (executor instanceof org.bukkit.entity.Player p) ? p.getUniqueId() : null;
+        var batch = UNDO.popLatestBy(uuid);
+        if (batch == null) {
+            src.getSender().sendMessage(msg().tr("undo.nothing"));
+            return 0;
+        }
+        World world = null;
+        for (World w : Bukkit.getWorlds()) {
+            ResourceKey<Level> k = ((CraftWorld) w).getHandle().dimension();
+            if (k.identifier().toString().equals(batch.dim)) { world = w; break; }
+        }
+        if (world == null) {
+            src.getSender().sendMessage(msg().tr("undo.world-gone", "dim", batch.dim));
+            return 0;
+        }
+        for (var change : batch.changes) {
+            applyChunk(world, change.chunkX(), change.chunkZ(), change.prev(), registry, src.getSender(), "undo");
+        }
+        src.getSender().sendMessage(msg().tr("undo.applied",
+                "n", String.valueOf(batch.changes.size()),
+                "actor", batch.actorName,
+                "reason", batch.reason));
+        return batch.changes.size();
+    }
+
+    /**
+     * Explain a wire's current power: dump each of its 6 neighbors with their
+     * block type and (for wires/sources) their power level, then show the
+     * highest contributor. Folia-safe: schedules the read on the chunk's
+     * region thread.
+     */
+    private static int why(CommandContext<CommandSourceStack> ctx, int x, int y, int z) {
+        var src = ctx.getSource();
+        Entity executor = src.getExecutor();
+        if (executor == null) { src.getSender().sendMessage(msg().tr("error.must-be-entity")); return 0; }
+        World w = executor.getWorld();
+        var sender = src.getSender();
+        int cx = x >> 4, cz = z >> 4;
+        Bukkit.getRegionScheduler().execute(pluginRef(), w, cx, cz, () -> {
+            org.bukkit.block.Block self = w.getBlockAt(x, y, z);
+            sender.sendMessage(msg().tr("why.header", "x", x, "y", y, "z", z, "type", self.getType().name().toLowerCase()));
+            int selfPower = readPower(self);
+            if (selfPower < 0) {
+                sender.sendMessage(msg().tr("why.not-wire-or-source"));
+            } else {
+                sender.sendMessage(msg().tr("why.self-power", "power", selfPower));
+            }
+            int maxNeighbor = 0;
+            String maxNeighborDir = "-";
+            org.bukkit.block.BlockFace[] faces = {
+                    org.bukkit.block.BlockFace.NORTH, org.bukkit.block.BlockFace.SOUTH,
+                    org.bukkit.block.BlockFace.EAST,  org.bukkit.block.BlockFace.WEST,
+                    org.bukkit.block.BlockFace.UP,    org.bukkit.block.BlockFace.DOWN };
+            String[] faceNames = { "N", "S", "E", "W", "↑", "↓" };
+            for (int i = 0; i < faces.length; i++) {
+                org.bukkit.block.Block n = self.getRelative(faces[i]);
+                int p = readPower(n);
+                String typeName = n.getType().name().toLowerCase();
+                String suffix;
+                if (p > 0) {
+                    suffix = " §f→ §bpower=" + p;
+                    int contribution = isWire(n) ? Math.max(0, p - 1) : p;
+                    if (contribution > maxNeighbor) { maxNeighbor = contribution; maxNeighborDir = faceNames[i]; }
+                } else if (p == 0 && isPotentialSource(n)) {
+                    suffix = " §f→ §bsource (off)";
+                } else {
+                    suffix = "";
+                }
+                sender.sendMessage(msg().tr("why.neighbor",
+                        "dir", faceNames[i], "type", typeName, "suffix", suffix));
+            }
+            sender.sendMessage(msg().tr("why.max",
+                    "dir", maxNeighborDir, "power", String.valueOf(maxNeighbor)));
+            if (selfPower >= 0) {
+                int delta = selfPower - maxNeighbor;
+                if (delta > 0) {
+                    sender.sendMessage(msg().tr("why.discrepancy",
+                            "self", String.valueOf(selfPower), "max", String.valueOf(maxNeighbor)));
+                } else {
+                    sender.sendMessage(msg().tr("why.consistent"));
+                }
+            }
+        });
+        return 1;
+    }
+
+    /** Read POWER property from wire or signal source; -1 if not applicable. */
+    private static int readPower(org.bukkit.block.Block b) {
+        var data = b.getBlockData();
+        if (data instanceof org.bukkit.block.data.AnaloguePowerable ap) return ap.getPower();
+        if (data instanceof org.bukkit.block.data.Powerable p)         return p.isPowered() ? 15 : 0;
+        // redstone block always 15
+        if (b.getType() == org.bukkit.Material.REDSTONE_BLOCK) return 15;
+        return -1;
+    }
+
+    private static boolean isWire(org.bukkit.block.Block b) {
+        return b.getType() == org.bukkit.Material.REDSTONE_WIRE;
+    }
+
+    private static boolean isPotentialSource(org.bukkit.block.Block b) {
+        var t = b.getType();
+        return t == org.bukkit.Material.LEVER || t == org.bukkit.Material.REDSTONE_BLOCK
+                || t.name().endsWith("_BUTTON") || t == org.bukkit.Material.OBSERVER
+                || t == org.bukkit.Material.REDSTONE_TORCH || t == org.bukkit.Material.REDSTONE_WALL_TORCH
+                || t == org.bukkit.Material.REPEATER || t == org.bukkit.Material.COMPARATOR;
+    }
+
     private static int reload(CommandContext<CommandSourceStack> ctx) {
         var sender = ctx.getSource().getSender();
         try {
@@ -566,13 +729,30 @@ public final class RedstoneRegionCommand {
 
     private static int applyArea(World w, int cx, int cz, int radius, RedstoneMode mode, ChunkRegistry registry,
                                  org.bukkit.command.CommandSender actor, String reason) {
+        // Group every change in this batch into a single undo entry so /undo
+        // reverses the whole /fill or /selection in one shot.
+        java.util.List<UndoBuffer.FlipChange> batchChanges = new java.util.ArrayList<>();
+        ResourceKey<Level> dim = ((CraftWorld) w).getHandle().dimension();
         int n = 0;
         for (int dx = -radius; dx <= radius; dx++)
             for (int dz = -radius; dz <= radius; dz++) {
-                applyChunk(w, cx + dx, cz + dz, mode, registry, actor, reason);
+                int x = cx + dx, z = cz + dz;
+                RedstoneMode prev = registry.modeOfChunk(dim, x, z);
+                applyChunk(w, x, z, mode, registry, actor, reason);
+                if (prev != mode) batchChanges.add(new UndoBuffer.FlipChange(x, z, prev, mode));
                 n++;
             }
+        recordUndo(actor, dim.identifier().toString(), reason, batchChanges);
         return n;
+    }
+
+    private static void recordUndo(org.bukkit.command.CommandSender actor, String dim, String reason,
+                                   java.util.List<UndoBuffer.FlipChange> changes) {
+        if ("undo".equals(reason)) return;   // never push undos themselves
+        java.util.UUID uuid = null; String name = "system";
+        if (actor instanceof org.bukkit.entity.Player p) { uuid = p.getUniqueId(); name = p.getName(); }
+        else if (actor != null) name = actor.getName();
+        UNDO.push(new UndoBuffer.Batch(System.currentTimeMillis(), uuid, name, dim, reason, changes));
     }
 
     /* -------------------------------------------------------------------- */
@@ -581,6 +761,9 @@ public final class RedstoneRegionCommand {
 
     /** Functional reload hook returning the new language code. */
     public interface ReloadHook { String run(); }
+
+    private static final UndoBuffer UNDO = new UndoBuffer();
+    public static UndoBuffer undoBuffer() { return UNDO; }
 
     private static volatile org.bukkit.plugin.Plugin PLUGIN;
     private static volatile net.ekaii.redstone.region.audit.AuditLog AUDIT;

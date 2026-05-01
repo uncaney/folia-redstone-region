@@ -94,6 +94,20 @@ sign.line.radius: "r={r}"
 sign.line.count: "{n} chunks"
 sign.line.author: "par {author}"
 
+# === /undo ===
+undo.nothing: "§7Rien à annuler."
+undo.world-gone: "§eLa dernière action était dans le monde §f{dim}§e mais ce monde n'est plus chargé — annulation impossible."
+undo.applied: "§a↶ §f{n}§a chunks annulés (action originale par §f{actor}§a, raison : {reason})."
+
+# === /why ===
+why.header: "§6═══ Pourquoi le wire @ ({x}, {y}, {z}) §e[{type}]§6 est à sa valeur actuelle ? ═══"
+why.not-wire-or-source: "§7  Ce bloc n'est ni un wire ni une source de signal — pas de power à lire."
+why.self-power: "§7  power actuel du bloc : §f{power}"
+why.neighbor: "§7  {dir} : §f{type}{suffix}"
+why.max: "§7  → contribution voisine max : §f{power}§7 depuis §f{dir}"
+why.discrepancy: "§e  ⚠ self={self} mais contribution voisine max = {max}. Probable état transitoire : relance après 1 tick, ou une source de strong-power passe par un conducteur."
+why.consistent: "§a  ✓ power du bloc cohérent avec la contribution voisine max (pas d'anomalie)."
+
 # === /reload ===
 reload.ok: "§a[redstone-region] config + langue rechargées (lang=§f{lang}§a). Le swap NMS de l'evaluator est inchangé — redémarre le serveur pour les changements de code."
 reload.error: "§c[redstone-region] reload échoué : §f{detail}"
@@ -114,6 +128,8 @@ help.cmd-check: "§a/redstone-region check §f— scanne le chunk pour patterns 
 help.cmd-profile: "§a/redstone-region profile §f— diagnostic complet du chunk + recommandation"
 help.cmd-selection: "§a/redstone-region selection <mode> §f— applique à ta sélection WorldEdit"
 help.cmd-reload: "§a/redstone-region reload §f— recharge config + langue sans redémarrer"
+help.cmd-undo: "§a/redstone-region undo §f— annule ta dernière action set/fill/selection"
+help.cmd-why: "§a/redstone-region why <x> <y> <z> §f— explique le power d'un wire"
 help.modes-header: "§bModes :"
 help.mode-vanilla: "§7  vanilla            §fcomportement Mojang strict, toutes les contraptions marchent"
 help.mode-ac: "§7  alternate-current  §fBFS + single-write, plus rapide mais quelques edge cases"
