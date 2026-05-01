@@ -148,7 +148,7 @@ public final class RedstoneRegionCommand {
         }
         Chunk chunk = executor.getLocation().getChunk();
         World w = executor.getWorld();
-        applyChunk(w, chunk.getX(), chunk.getZ(), mode, registry);
+        applyChunk(w, chunk.getX(), chunk.getZ(), mode, registry, src.getSender(), "command");
         src.getSender().sendMessage(Component.text("→ " + mode.slug() + " for chunk ("
                 + chunk.getX() + ", " + chunk.getZ() + ")", NamedTextColor.GREEN));
         return 1;
@@ -170,7 +170,7 @@ public final class RedstoneRegionCommand {
         }
         Chunk chunk = executor.getLocation().getChunk();
         World w = executor.getWorld();
-        int count = applyArea(w, chunk.getX(), chunk.getZ(), radius, mode, registry);
+        int count = applyArea(w, chunk.getX(), chunk.getZ(), radius, mode, registry, src.getSender(), "command-fill");
         src.getSender().sendMessage(Component.text("→ " + mode.slug() + " for "
                 + count + " chunks", NamedTextColor.GREEN));
         return count;
@@ -181,7 +181,7 @@ public final class RedstoneRegionCommand {
         Entity executor = src.getExecutor();
         if (executor == null) return 0;
         Chunk chunk = executor.getLocation().getChunk();
-        applyChunk(executor.getWorld(), chunk.getX(), chunk.getZ(), RedstoneMode.VANILLA, registry);
+        applyChunk(executor.getWorld(), chunk.getX(), chunk.getZ(), RedstoneMode.VANILLA, registry, src.getSender(), "command-clear");
         src.getSender().sendMessage(Component.text("→ vanilla for chunk ("
                 + chunk.getX() + ", " + chunk.getZ() + ")", NamedTextColor.GREEN));
         return 1;
@@ -193,7 +193,7 @@ public final class RedstoneRegionCommand {
         if (executor == null) return 0;
         int radius = IntegerArgumentType.getInteger(ctx, "radius");
         Chunk chunk = executor.getLocation().getChunk();
-        int count = applyArea(executor.getWorld(), chunk.getX(), chunk.getZ(), radius, RedstoneMode.VANILLA, registry);
+        int count = applyArea(executor.getWorld(), chunk.getX(), chunk.getZ(), radius, RedstoneMode.VANILLA, registry, src.getSender(), "command-clear-area");
         src.getSender().sendMessage(Component.text("→ vanilla for " + count + " chunks", NamedTextColor.GREEN));
         return count;
     }
@@ -280,26 +280,50 @@ public final class RedstoneRegionCommand {
         var top = TIMING.top(limit);
         src.getSender().sendMessage(Component.text("=== Top " + top.size() + " hottest chunks (by total redstone time) ===", NamedTextColor.GOLD));
         if (top.isEmpty()) {
-            src.getSender().sendMessage(Component.text("no recorded redstone activity yet — toggle a lever first", NamedTextColor.GRAY));
+            src.getSender().sendMessage(Component.text(
+                    "no recorded redstone activity yet — toggle a lever or break/place a wire first",
+                    NamedTextColor.GRAY));
             return 0;
         }
+        src.getSender().sendMessage(Component.text(
+                "  #   world         chunk(cx,cz)        block-bounds (x..x, z..z)            count    avg     max      total",
+                NamedTextColor.GRAY));
         int i = 0;
         for (var hot : top) {
             i++;
             String dim = hot.dim();
             var cell = hot.cell();
+            int wx = hot.cx() << 4, wz = hot.cz() << 4;
             src.getSender().sendMessage(Component.text(
-                    String.format("%2d. %s (%4d, %4d)  count=%5d  avg=%6.2fms  max=%6.2fms  total=%7.0fms",
-                            i, shortDim(dim), hot.cx(), hot.cz(),
-                            cell.count(), cell.avgMs(), cell.maxNs() / 1_000_000.0, cell.totalNs() / 1_000_000.0),
+                    String.format("  %2d. %-12s (%5d, %5d)  blocks (%6d..%6d, %6d..%6d)  %6d  %s  %s  %s",
+                            i, abbrevDim(dim, 12),
+                            hot.cx(), hot.cz(),
+                            wx, wx + 15, wz, wz + 15,
+                            cell.count(),
+                            humanTime(cell.totalNs() / Math.max(1, cell.count())),  // avg
+                            humanTime(cell.maxNs()),
+                            humanTime(cell.totalNs())),
                     NamedTextColor.AQUA));
         }
+        src.getSender().sendMessage(Component.text(
+                "  count = number of recomputes; avg = mean time per recompute; max = worst single recompute; total = cumulative.",
+                NamedTextColor.DARK_GRAY));
         return 1;
     }
 
-    private static String shortDim(String dim) {
+    /** Human-readable nanos: "850ns", "12µs", "3.4ms", "1.2s". */
+    private static String humanTime(long ns) {
+        if (ns < 1_000)         return String.format("%5dns", ns);
+        if (ns < 1_000_000)     return String.format("%5.1fµs", ns / 1_000.0);
+        if (ns < 1_000_000_000) return String.format("%5.2fms", ns / 1_000_000.0);
+        return String.format("%5.2fs ", ns / 1_000_000_000.0);
+    }
+
+    private static String abbrevDim(String dim, int max) {
+        // "minecraft:overworld" → "overworld"; truncate if longer than max
         int slash = dim.indexOf(':');
-        return slash >= 0 ? dim.substring(slash + 1) : dim;
+        String s = slash >= 0 ? dim.substring(slash + 1) : dim;
+        return s.length() > max ? s.substring(0, max - 1) + "…" : s;
     }
 
     private static int statsReset(CommandContext<CommandSourceStack> ctx) {
@@ -429,10 +453,15 @@ public final class RedstoneRegionCommand {
     }
 
     private static int applyArea(World w, int cx, int cz, int radius, RedstoneMode mode, ChunkRegistry registry) {
+        return applyArea(w, cx, cz, radius, mode, registry, null, "command-area");
+    }
+
+    private static int applyArea(World w, int cx, int cz, int radius, RedstoneMode mode, ChunkRegistry registry,
+                                 org.bukkit.command.CommandSender actor, String reason) {
         int n = 0;
         for (int dx = -radius; dx <= radius; dx++) {
             for (int dz = -radius; dz <= radius; dz++) {
-                applyChunk(w, cx + dx, cz + dz, mode, registry);
+                applyChunk(w, cx + dx, cz + dz, mode, registry, actor, reason);
                 n++;
             }
         }

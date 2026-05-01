@@ -9,9 +9,9 @@ description: Per-chunk redstone-engine dispatch (vanilla / alternate-current / e
 website: https://github.com/uncaney/folia-redstone-region
 dependencies:
   server:
-    BlueMap:        { load: BEFORE, required: false, join-classpath: false }
-    PlaceholderAPI: { load: BEFORE, required: false, join-classpath: false }
-    WorldEdit:      { load: BEFORE, required: false, join-classpath: false }
+    BlueMap:        { load: BEFORE, required: false, join-classpath: true }
+    PlaceholderAPI: { load: BEFORE, required: false, join-classpath: true }
+    WorldEdit:      { load: BEFORE, required: false, join-classpath: true }
 permissions:
   redstone-region.admin:
     description: Allows use of /redstone-region administrative commands.
