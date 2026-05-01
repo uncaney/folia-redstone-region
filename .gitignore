@@ -13,3 +13,4 @@ test-harness/cache/
 hs_err_pid*
 replay_pid*
 *.log
+research/upstream-ac-1.21.11/
