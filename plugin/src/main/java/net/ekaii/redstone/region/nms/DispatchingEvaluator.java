@@ -10,6 +10,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.RedStoneWireBlock;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.redstone.DefaultRedstoneWireEvaluator;
 import net.minecraft.world.level.redstone.Orientation;
 import net.minecraft.world.level.redstone.RedstoneWireEvaluator;
 import org.jspecify.annotations.Nullable;
@@ -19,8 +20,18 @@ import org.jspecify.annotations.Nullable;
  * each call to one of four evaluators: vanilla, alternate-current, eigencraft,
  * or disabled. Records per-chunk timing so the auto-AC scanner and the
  * /stats command have data to act on.
+ *
+ * <p><b>Why we extend {@link DefaultRedstoneWireEvaluator} (not the abstract
+ * {@code RedstoneWireEvaluator}).</b> Paper's bundled Eigencraft/RedstoneWireTurbo
+ * calls {@code RedStoneWireBlock.calculateCurrentChanges()}, which itself does
+ * {@code ((DefaultRedstoneWireEvaluator) this.evaluator).calculateTargetStrength(...)}.
+ * Since we replace the field with this dispatcher, the cast must succeed —
+ * which means we must extend {@code DefaultRedstoneWireEvaluator}, not just
+ * {@code RedstoneWireEvaluator}. The inherited {@code calculateTargetStrength}
+ * is fine: it computes the vanilla power, which is what Eigencraft's per-wire
+ * recompute step needs.
  */
-public final class DispatchingEvaluator extends RedstoneWireEvaluator {
+public final class DispatchingEvaluator extends DefaultRedstoneWireEvaluator {
 
     private final RedstoneWireEvaluator vanilla;
     private final AcRedstoneWireEvaluator alternateCurrent;
