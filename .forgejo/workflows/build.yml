@@ -16,11 +16,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 21
+      - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '25'
 
       - name: Cache gradle
         uses: actions/cache@v4
@@ -32,6 +32,15 @@ jobs:
           key: gradle-${{ hashFiles('**/*.gradle.kts','gradle/wrapper/gradle-wrapper.properties','gradle.properties') }}
           restore-keys: gradle-
 
+      - name: Fetch Luminol compile-only jars
+        run: |
+          mkdir -p vendor
+          curl -fsSL -o vendor/luminol-server-26.1.2.jar \
+            https://forgejo.ekaii.fr/exo/luminol-ekaii/releases/download/v26.1.2-ekaii-0.1.0/luminol-server-26.1.2.jar
+          curl -fsSL -o vendor/luminol-api-26.1.2.jar \
+            https://forgejo.ekaii.fr/exo/luminol-ekaii/releases/download/v26.1.2-ekaii-0.1.0/luminol-api-26.1.2.jar
+          ls -lah vendor/
+
       - name: Build
         run: |
           chmod +x gradlew
@@ -40,11 +49,11 @@ jobs:
       - name: Upload plugin jar
         uses: actions/upload-artifact@v3
         with:
-          name: folia-redstone-region
-          path: plugin/build/libs/plugin-*-reobf.jar
+          name: RedstoneRegions
+          path: plugin/build/libs/plugin-[0-9]*.jar
 
       - name: Upload test-plugin jar
         uses: actions/upload-artifact@v3
         with:
-          name: folia-redstone-region-tests
-          path: test-plugin/build/libs/test-plugin-*-reobf.jar
+          name: RedstoneRegions-tests
+          path: test-plugin/build/libs/test-plugin-[0-9]*.jar
