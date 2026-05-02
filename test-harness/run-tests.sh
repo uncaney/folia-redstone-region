@@ -14,8 +14,8 @@ mkdir -p "$SERVER/plugins" "$SERVER/test-results"
 rm -f "$SERVER/test-results/ready" "$SERVER/test-results/junit.xml"
 
 # Copy plugin jars (shadowJar output — runtime is mojmap on 1.20.5+, no reobf needed)
-PLUGIN_JAR="$ROOT/plugin/build/libs/plugin-0.2.1.jar"
-TEST_JAR="$ROOT/test-plugin/build/libs/test-plugin-0.2.1.jar"
+PLUGIN_JAR="$ROOT/plugin/build/libs/RedstoneRegions-0.2.2.jar"
+TEST_JAR="$ROOT/test-plugin/build/libs/test-plugin-0.2.2.jar"
 [ -f "$PLUGIN_JAR" ] || { echo "plugin reobf jar missing — run ./gradlew build first"; exit 3; }
 [ -f "$TEST_JAR" ]   || { echo "test-plugin reobf jar missing — run ./gradlew build first"; exit 3; }
 cp -f "$PLUGIN_JAR" "$SERVER/plugins/folia-redstone-region.jar"

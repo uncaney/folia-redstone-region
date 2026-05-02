@@ -58,6 +58,7 @@ tasks {
         options.encoding = "UTF-8"
     }
     shadowJar {
+        archiveBaseName.set("RedstoneRegions")
         archiveClassifier.set("")
         // bStats is the only thing we shade — relocate it under our package
         // so it doesn't clash with other plugins shipping their own copy.
@@ -67,6 +68,7 @@ tasks {
         }
     }
     jar {
+        archiveBaseName.set("RedstoneRegions")
         archiveClassifier.set("plain")
     }
     // The reobfJar task came from paperweight-userdev; in 1.20.5+ runtime is

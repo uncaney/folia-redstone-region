@@ -50,7 +50,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: RedstoneRegions
-          path: plugin/build/libs/plugin-[0-9]*.jar
+          path: plugin/build/libs/RedstoneRegions-[0-9]*.jar
 
       - name: Upload test-plugin jar
         uses: actions/upload-artifact@v3
