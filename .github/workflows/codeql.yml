@@ -25,14 +25,22 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '25'
 
       - uses: github/codeql-action/init@v3
         with:
           languages: java-kotlin
           queries: security-and-quality
 
-      - name: Build (manual mode for paperweight-userdev)
+      - name: Fetch Luminol compile-only jars
+        run: |
+          mkdir -p vendor
+          curl -fsSL -o vendor/luminol-server-26.1.2.jar \
+            https://forgejo.ekaii.fr/exo/luminol-ekaii/releases/download/v26.1.2-ekaii-0.1.0/luminol-server-26.1.2.jar
+          curl -fsSL -o vendor/luminol-api-26.1.2.jar \
+            https://forgejo.ekaii.fr/exo/luminol-ekaii/releases/download/v26.1.2-ekaii-0.1.0/luminol-api-26.1.2.jar
+
+      - name: Build
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon :plugin:compileJava :test-plugin:compileJava
