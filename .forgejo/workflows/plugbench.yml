@@ -121,17 +121,22 @@ jobs:
             if [ -n "$ARTIFACT_GLOB" ]; then
               JAR=$(ls -1 $ARTIFACT_GLOB 2>/dev/null | head -1)
             else
-              JAR=$(find . -name '*.jar' \
+              # Look only in canonical output dirs (build/libs for gradle, target
+              # for maven); pick the largest non-sources/javadoc/api jar.
+              JAR=$(find . \
+                      \( -path '*/build/libs/*.jar' -o -path '*/target/*.jar' \) \
                       -not -path './.git/*' \
                       -not -path '*/build/tmp/*' \
                       -not -path '*/buildSrc/*' \
+                      -not -path '*/gradle/wrapper/*' \
+                      -not -path '*/.gradle/*' \
                       -not -name '*-sources.jar' \
                       -not -name '*-javadoc.jar' \
-                      -not -name '*-api.jar' \
+                      -not -name 'gradle-wrapper.jar' \
                     | xargs -I{} sh -c 'echo "$(stat -c %s {} 2>/dev/null) {}"' \
                     | sort -rn | head -1 | awk '{print $2}')
             fi
-            [ -z "$JAR" ] && { echo "no jar produced"; exit 1; }
+            [ -z "$JAR" ] && { echo "no jar produced — ls build/libs:"; ls -la build/libs target 2>&1; exit 1; }
             echo "produced jar: $JAR ($(stat -c %s "$JAR") bytes)"
             echo "jar=$JAR" >> $GITHUB_OUTPUT
           } > /tmp/build.log 2>&1
