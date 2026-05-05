@@ -74,46 +74,40 @@ jobs:
           distribution: temurin
           java-version: '25'
 
-      - name: Read .plugbench.toml [bench.build]
-        id: cfg
+      - name: Build (prebuild + main + jar discovery)
+        # Combined into one step so empty config strings don't leak through
+        # $GITHUB_ENV mid-flight. Reads .plugbench.toml directly here. All
+        # output streams to /tmp/build.log + a sibling-published gate-log.
+        id: find
         run: |
-          set -ex
-          PREBUILD=""
-          BUILD_CMD=""
-          ARTIFACT_GLOB=""
+          set -uo pipefail
+          PREBUILD="" ; BUILD_CMD="" ; ARTIFACT_GLOB=""
           if [ -f .plugbench.toml ]; then
-            python3 - > /tmp/buildcfg.env <<'PYEOF'
-          import tomllib, shlex, sys
+            eval "$(python3 - <<'PYEOF'
+          import tomllib
           from pathlib import Path
           b = (tomllib.loads(Path(".plugbench.toml").read_text()).get("bench", {}) or {}).get("build", {}) or {}
-          print("PREBUILD=" + shlex.quote("\n".join(b.get("prebuild", []))))
-          print("BUILD_CMD=" + shlex.quote(b.get("command", "")))
-          print("ARTIFACT_GLOB=" + shlex.quote(b.get("artifact_glob", "")))
+          def emit(k, v):
+              if not v: return
+              # Single-quote and escape any embedded single-quotes
+              v = v.replace("'", "'\\''")
+              print(f"{k}='{v}'")
+          emit("PREBUILD", "\n".join(b.get("prebuild", [])))
+          emit("BUILD_CMD", b.get("command", ""))
+          emit("ARTIFACT_GLOB", b.get("artifact_glob", ""))
           PYEOF
-            cat /tmp/buildcfg.env >> $GITHUB_ENV
-            cat /tmp/buildcfg.env | docker run --rm -i \
-              -v /fast/plugbench:/dst -e P="${PR_REPO//\//_}/${SHA}" busybox \
-              sh -c 'mkdir -p /dst/gate-logs/$P && cat > /dst/gate-logs/$P/buildcfg.env'
+          )"
           fi
 
-      - name: Prebuild (download vendor deps if any)
-        run: |
-          { set -ex
-            if [ -n "${PREBUILD:-}" ]; then
-              echo "$PREBUILD" | bash -ex
+          {
+            set -ex
+            if [ -n "$PREBUILD" ]; then
+              echo "## PREBUILD"
+              bash -ex -c "$PREBUILD"
             fi
-          } > /tmp/prebuild.log 2>&1 || rc=$?
-          cat /tmp/prebuild.log | docker run --rm -i \
-            -v /fast/plugbench:/dst -e P="${PR_REPO//\//_}/${SHA}" busybox \
-            sh -c 'mkdir -p /dst/gate-logs/$P && cat > /dst/gate-logs/$P/prebuild.log'
-          tail -30 /tmp/prebuild.log
-          [ "${rc:-0}" -ne 0 ] && exit "${rc:-1}" || true
-
-      - name: Build
-        run: |
-          { set -ex
-            if [ -n "${BUILD_CMD:-}" ]; then
-              bash -c "$BUILD_CMD"
+            echo "## BUILD"
+            if [ -n "$BUILD_CMD" ]; then
+              bash -ex -c "$BUILD_CMD"
             elif [ -f gradlew ]; then
               chmod +x gradlew
               ./gradlew --no-daemon clean build
@@ -123,33 +117,31 @@ jobs:
             else
               echo "no build system detected"; exit 1
             fi
-          } > /tmp/build.log 2>&1 || rc=$?
+            echo "## FIND JAR"
+            if [ -n "$ARTIFACT_GLOB" ]; then
+              JAR=$(ls -1 $ARTIFACT_GLOB 2>/dev/null | head -1)
+            else
+              JAR=$(find . -name '*.jar' \
+                      -not -path './.git/*' \
+                      -not -path '*/build/tmp/*' \
+                      -not -path '*/buildSrc/*' \
+                      -not -name '*-sources.jar' \
+                      -not -name '*-javadoc.jar' \
+                      -not -name '*-api.jar' \
+                    | xargs -I{} sh -c 'echo "$(stat -c %s {} 2>/dev/null) {}"' \
+                    | sort -rn | head -1 | awk '{print $2}')
+            fi
+            [ -z "$JAR" ] && { echo "no jar produced"; exit 1; }
+            echo "produced jar: $JAR ($(stat -c %s "$JAR") bytes)"
+            echo "jar=$JAR" >> $GITHUB_OUTPUT
+          } > /tmp/build.log 2>&1
+          rc=$?
           cat /tmp/build.log | docker run --rm -i \
             -v /fast/plugbench:/dst -e P="${PR_REPO//\//_}/${SHA}" busybox \
             sh -c 'mkdir -p /dst/gate-logs/$P && cat > /dst/gate-logs/$P/build.log'
+          echo "=== build.log tail ==="
           tail -80 /tmp/build.log
-          [ "${rc:-0}" -ne 0 ] && exit "${rc:-1}" || true
-
-      - name: Find produced jar
-        id: find
-        run: |
-          set -ex
-          if [ -n "${ARTIFACT_GLOB:-}" ]; then
-            JAR=$(ls -1 ${ARTIFACT_GLOB} 2>/dev/null | head -1)
-          else
-            JAR=$(find . -name '*.jar' \
-                    -not -path './.git/*' \
-                    -not -path '*/build/tmp/*' \
-                    -not -path '*/buildSrc/*' \
-                    -not -name '*-sources.jar' \
-                    -not -name '*-javadoc.jar' \
-                    -not -name '*-api.jar' \
-                  | xargs -I{} sh -c 'echo "$(stat -c %s {} 2>/dev/null) {}"' \
-                  | sort -rn | head -1 | awk '{print $2}')
-          fi
-          [ -z "$JAR" ] && { echo "no jar produced"; exit 1; }
-          echo "jar=$JAR" >> $GITHUB_OUTPUT
-          echo "found jar: $JAR ($(stat -c %s "$JAR") bytes)"
+          exit $rc
 
       - name: Stage jar to bench host
         id: stage
