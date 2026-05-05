@@ -8,3 +8,13 @@ depth           = "L2"
 repeats         = 3
 warmup_min      = 2
 duration_min    = 5
+
+[bench.build]
+# Build needs Luminol compile-only jars staged in vendor/.
+prebuild = [
+  "mkdir -p vendor",
+  "curl -fsSL -o vendor/luminol-server-26.1.2.jar https://forgejo.ekaii.fr/exo/luminol-ekaii/releases/download/v26.1.2-ekaii-0.1.0/luminol-server-26.1.2.jar",
+  "curl -fsSL -o vendor/luminol-api-26.1.2.jar    https://forgejo.ekaii.fr/exo/luminol-ekaii/releases/download/v26.1.2-ekaii-0.1.0/luminol-api-26.1.2.jar",
+]
+command       = "chmod +x gradlew && ./gradlew --no-daemon :plugin:build :test-plugin:build"
+artifact_glob = "plugin/build/libs/*.jar"
