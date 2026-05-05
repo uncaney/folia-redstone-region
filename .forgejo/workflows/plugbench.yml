@@ -65,14 +65,15 @@ jobs:
           BUILD_CMD=""
           ARTIFACT_GLOB=""
           if [ -f .plugbench.toml ]; then
-            python3 - <<'PY' > /tmp/buildcfg.env
-import tomllib, shlex
-from pathlib import Path
-b = (tomllib.loads(Path(".plugbench.toml").read_text()).get("bench", {}) or {}).get("build", {}) or {}
-print("PREBUILD=" + shlex.quote("\n".join(b.get("prebuild", []))))
-print("BUILD_CMD=" + shlex.quote(b.get("command", "")))
-print("ARTIFACT_GLOB=" + shlex.quote(b.get("artifact_glob", "")))
-PY
+            apt-get install -y --no-install-recommends python3 >/dev/null 2>&1 || true
+            python3 -c '
+          import tomllib, shlex, sys
+          from pathlib import Path
+          b = (tomllib.loads(Path(".plugbench.toml").read_text()).get("bench", {}) or {}).get("build", {}) or {}
+          print("PREBUILD=" + shlex.quote("\n".join(b.get("prebuild", []))))
+          print("BUILD_CMD=" + shlex.quote(b.get("command", "")))
+          print("ARTIFACT_GLOB=" + shlex.quote(b.get("artifact_glob", "")))
+          ' > /tmp/buildcfg.env
             cat /tmp/buildcfg.env >> $GITHUB_ENV
           fi
 
