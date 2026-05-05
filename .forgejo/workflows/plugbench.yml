@@ -43,19 +43,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install JDK 25 + docker CLI
+      - name: Init bench-host log dir
+        # Ensure the log dir exists on the bench host so EVERY subsequent step can
+        # tee its output there. Forgejo's task-log API is unreliable on this
+        # instance, so we publish our own logs and inspect via SSH.
         run: |
           set -ex
           if ! command -v docker >/dev/null 2>&1; then
             apt-get update -qq
-            apt-get install -y --no-install-recommends docker.io curl jq
+            apt-get install -y --no-install-recommends docker.io curl jq python3
           fi
-          if [ ! -d /opt/jdk ]; then
-            curl -fsSL https://download.bell-sw.com/java/25.0.1+9/bellsoft-jdk25.0.1+9-linux-amd64.tar.gz \
-              | tar -xz -C /opt
-            ln -sf /opt/jdk-25.0.1+9 /opt/jdk
-          fi
-          /opt/jdk/bin/java -version
+          docker run --rm -v /fast/plugbench:/dst busybox \
+            sh -c "mkdir -p /dst/gate-logs/${PR_REPO//\//_}/${SHA} && chmod -R 0755 /dst/gate-logs"
+
+      - name: Install JDK 25
+        run: |
+          set -ex
+          { if [ ! -d /opt/jdk ]; then
+              curl -fsSL https://download.bell-sw.com/java/25.0.1+9/bellsoft-jdk25.0.1+9-linux-amd64.tar.gz \
+                | tar -xz -C /opt
+              ln -sf /opt/jdk-25.0.1+9 /opt/jdk
+            fi
+            /opt/jdk/bin/java -version 2>&1
+          } > /tmp/jdk-install.log 2>&1 || rc=$?
+          cat /tmp/jdk-install.log | docker run --rm -i \
+            -v /fast/plugbench:/dst -e P="${PR_REPO//\//_}/${SHA}" busybox \
+            sh -c 'cat > /dst/gate-logs/$P/jdk-install.log'
+          tail -20 /tmp/jdk-install.log
+          [ "${rc:-0}" -ne 0 ] && exit "${rc:-1}" || true
 
       - name: Read .plugbench.toml [bench.build]
         id: cfg
@@ -65,40 +80,55 @@ jobs:
           BUILD_CMD=""
           ARTIFACT_GLOB=""
           if [ -f .plugbench.toml ]; then
-            apt-get install -y --no-install-recommends python3 >/dev/null 2>&1 || true
-            python3 -c '
+            python3 - > /tmp/buildcfg.env <<'PYEOF'
           import tomllib, shlex, sys
           from pathlib import Path
           b = (tomllib.loads(Path(".plugbench.toml").read_text()).get("bench", {}) or {}).get("build", {}) or {}
           print("PREBUILD=" + shlex.quote("\n".join(b.get("prebuild", []))))
           print("BUILD_CMD=" + shlex.quote(b.get("command", "")))
           print("ARTIFACT_GLOB=" + shlex.quote(b.get("artifact_glob", "")))
-          ' > /tmp/buildcfg.env
+          PYEOF
             cat /tmp/buildcfg.env >> $GITHUB_ENV
+            cat /tmp/buildcfg.env | docker run --rm -i \
+              -v /fast/plugbench:/dst -e P="${PR_REPO//\//_}/${SHA}" busybox \
+              sh -c 'cat > /dst/gate-logs/$P/buildcfg.env'
           fi
 
       - name: Prebuild (download vendor deps if any)
         run: |
-          if [ -n "${PREBUILD:-}" ]; then
-            echo "$PREBUILD" | bash -ex
-          fi
+          { set -ex
+            if [ -n "${PREBUILD:-}" ]; then
+              echo "$PREBUILD" | bash -ex
+            fi
+          } > /tmp/prebuild.log 2>&1 || rc=$?
+          cat /tmp/prebuild.log | docker run --rm -i \
+            -v /fast/plugbench:/dst -e P="${PR_REPO//\//_}/${SHA}" busybox \
+            sh -c 'cat > /dst/gate-logs/$P/prebuild.log'
+          tail -30 /tmp/prebuild.log
+          [ "${rc:-0}" -ne 0 ] && exit "${rc:-1}" || true
 
       - name: Build
         run: |
-          set -ex
-          export JAVA_HOME=/opt/jdk
-          export PATH="$JAVA_HOME/bin:$PATH"
-          if [ -n "${BUILD_CMD:-}" ]; then
-            bash -c "$BUILD_CMD"
-          elif [ -f gradlew ]; then
-            chmod +x gradlew
-            ./gradlew --no-daemon clean build
-          elif [ -f pom.xml ]; then
-            apt-get install -y --no-install-recommends maven
-            mvn -B -DskipTests package
-          else
-            echo "no build system detected"; exit 1
-          fi
+          { set -ex
+            export JAVA_HOME=/opt/jdk
+            export PATH="$JAVA_HOME/bin:$PATH"
+            if [ -n "${BUILD_CMD:-}" ]; then
+              bash -c "$BUILD_CMD"
+            elif [ -f gradlew ]; then
+              chmod +x gradlew
+              ./gradlew --no-daemon clean build
+            elif [ -f pom.xml ]; then
+              apt-get install -y --no-install-recommends maven
+              mvn -B -DskipTests package
+            else
+              echo "no build system detected"; exit 1
+            fi
+          } > /tmp/build.log 2>&1 || rc=$?
+          cat /tmp/build.log | docker run --rm -i \
+            -v /fast/plugbench:/dst -e P="${PR_REPO//\//_}/${SHA}" busybox \
+            sh -c 'cat > /dst/gate-logs/$P/build.log'
+          tail -80 /tmp/build.log
+          [ "${rc:-0}" -ne 0 ] && exit "${rc:-1}" || true
 
       - name: Find produced jar
         id: find
