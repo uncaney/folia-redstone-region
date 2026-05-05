@@ -34,7 +34,13 @@ on:
 jobs:
   bench:
     runs-on: ubuntu-latest
-    container: { image: node:20-bookworm }
+    container:
+      image: node:20-bookworm
+      volumes:
+        # Without these, `docker run` and bind-writes from inside the job fail.
+        # The runner's /data/config.yml whitelists both via `valid_volumes`.
+        - /var/run/docker.sock:/var/run/docker.sock
+        - /fast/plugbench:/fast/plugbench
     env:
       SHA: ${{ github.sha }}
       FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN || secrets.GITHUB_TOKEN }}
