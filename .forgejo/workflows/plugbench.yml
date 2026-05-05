@@ -1,112 +1,130 @@
 # plugbench gate (plugin) — drop-in workflow.
-# Triggers AFTER the repo's existing build.yml completes successfully (via
-# workflow_run), downloads the produced jar, runs plugbench against it, sets a
-# commit status ("plugbench/bench: success|failure"). Branch protection on main
-# requires that status to be green to merge.
+# Triggers on every push + PR (workflow_run isn't supported on this forgejo
+# instance). Builds the jar inline, runs plugbench against it, sets a commit
+# status — branch protection blocks merge when the bench fails.
 #
-# Customise behaviour by adding `.plugbench.toml` to repo root:
+# Customise via `.plugbench.toml`:
 #
 #     [bench]
-#     flavor          = "luminol"
+#     flavor          = "luminol"           # paper | folia | luminol
 #     flavor_version  = "26.1.2-ekaii"
 #     scenarios       = ["idle", "chunkstorm"]
-#     depth           = "L2"
+#     depth           = "L2"                # L0..L4
 #     repeats         = 2
 #     warmup_min      = 2
 #     duration_min    = 5
 #
 #     [bench.deps]
-#     plugins = ["mapacheelib"]
+#     plugins = ["mapacheelib"]             # extra jars from /fast/plugbench/jars/plugins/
 #
-# Defaults: paper:1.21.4-build-228, idle+chunkstorm, L2, 2 reps, 2/5 warmup/dur.
+#     [bench.build]                         # optional — only set when defaults don't work
+#     prebuild = [
+#       "mkdir -p vendor",
+#       "curl -fsSL -o vendor/dep.jar https://...",
+#     ]
+#     command       = "./gradlew --no-daemon clean :plugin:build"
+#     artifact_glob = "plugin/build/libs/*.jar"
 name: plugbench
 on:
-  # Run after the existing build.yml succeeds — gives us the produced jar.
-  workflow_run:
-    workflows: ["build"]
-    types: [completed]
-  workflow_dispatch:
-    inputs:
-      jar_url:
-        description: "Direct URL to a jar to bench (skips the workflow_run path)"
-        required: false
+  push:
+    branches: [main, master]
+  pull_request: {}
+  workflow_dispatch: {}
 
 jobs:
   bench:
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     container: { image: node:20-bookworm }
     env:
-      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      SHA: ${{ github.sha }}
       FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN || secrets.GITHUB_TOKEN }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
       PR_REPO: ${{ github.repository }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
-      - name: Resolve PR number (if any)
-        id: pr
+      - name: Install JDK 25 + docker CLI
         run: |
-          PR_NUM=""
-          if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            # The triggering workflow_run carries pull_requests metadata.
-            PR_NUM=$(echo '${{ toJson(github.event.workflow_run.pull_requests) }}' \
-              | python3 -c "import json,sys; d=json.load(sys.stdin); print(d[0]['number']) if d else None" 2>/dev/null || true)
-          fi
-          echo "number=$PR_NUM" >> $GITHUB_OUTPUT
-
-      - name: Install docker CLI + curl + jq
-        run: |
+          set -ex
           if ! command -v docker >/dev/null 2>&1; then
             apt-get update -qq
             apt-get install -y --no-install-recommends docker.io curl jq
           fi
-          docker --version
+          if [ ! -d /opt/jdk ]; then
+            curl -fsSL https://download.bell-sw.com/java/25.0.1+9/bellsoft-jdk25.0.1+9-linux-amd64.tar.gz \
+              | tar -xz -C /opt
+            ln -sf /opt/jdk-25.0.1+9 /opt/jdk
+          fi
+          /opt/jdk/bin/java -version
 
-      - name: Download jar artifact from triggering build
-        if: ${{ github.event_name == 'workflow_run' }}
+      - name: Read .plugbench.toml [bench.build]
+        id: cfg
         run: |
           set -ex
-          # The triggering run's artifacts are reachable via the actions API.
-          RUN_ID="${{ github.event.workflow_run.id }}"
-          mkdir -p _jar
-          # List artifacts on the triggering run.
-          ARTS=$(curl -sS -H "Authorization: token $FORGEJO_TOKEN" \
-            "${{ github.server_url }}/api/v1/repos/${{ github.repository }}/actions/runs/${RUN_ID}/artifacts" || true)
-          # Forgejo's API returns a JSON list; each artifact has an archive_download_url.
-          # Try common artifact names first, fall back to the first jar found.
-          for name in plugin-jar engine-jar plugin server-jar jar; do
-            URL=$(echo "$ARTS" | jq -r ".artifacts[]? | select(.name==\"$name\") | .archive_download_url" 2>/dev/null | head -1)
-            [ -n "$URL" ] && [ "$URL" != "null" ] && break
-          done
-          # Fallback: first artifact whose name contains "jar"
-          if [ -z "${URL:-}" ] || [ "$URL" = "null" ]; then
-            URL=$(echo "$ARTS" | jq -r '.artifacts[]? | select(.name|test("jar";"i")) | .archive_download_url' 2>/dev/null | head -1)
+          PREBUILD=""
+          BUILD_CMD=""
+          ARTIFACT_GLOB=""
+          if [ -f .plugbench.toml ]; then
+            python3 - <<'PY' > /tmp/buildcfg.env
+import tomllib, shlex
+from pathlib import Path
+b = (tomllib.loads(Path(".plugbench.toml").read_text()).get("bench", {}) or {}).get("build", {}) or {}
+print("PREBUILD=" + shlex.quote("\n".join(b.get("prebuild", []))))
+print("BUILD_CMD=" + shlex.quote(b.get("command", "")))
+print("ARTIFACT_GLOB=" + shlex.quote(b.get("artifact_glob", "")))
+PY
+            cat /tmp/buildcfg.env >> $GITHUB_ENV
           fi
-          if [ -z "${URL:-}" ] || [ "$URL" = "null" ]; then
-            echo "no artifact found on run $RUN_ID — skipping bench"
-            echo "skip=1" >> $GITHUB_ENV
-            exit 0
-          fi
-          curl -fsSL -H "Authorization: token $FORGEJO_TOKEN" -o /tmp/art.zip "$URL"
-          (cd _jar && unzip -q /tmp/art.zip)
-          ls -la _jar/
 
-      - name: Download jar from URL (manual dispatch)
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.jar_url != '' }}
+      - name: Prebuild (download vendor deps if any)
         run: |
-          mkdir -p _jar
-          curl -fsSL -o "_jar/$(basename '${{ inputs.jar_url }}')" "${{ inputs.jar_url }}"
+          if [ -n "${PREBUILD:-}" ]; then
+            echo "$PREBUILD" | bash -ex
+          fi
+
+      - name: Build
+        run: |
+          set -ex
+          export JAVA_HOME=/opt/jdk
+          export PATH="$JAVA_HOME/bin:$PATH"
+          if [ -n "${BUILD_CMD:-}" ]; then
+            bash -c "$BUILD_CMD"
+          elif [ -f gradlew ]; then
+            chmod +x gradlew
+            ./gradlew --no-daemon clean build
+          elif [ -f pom.xml ]; then
+            apt-get install -y --no-install-recommends maven
+            mvn -B -DskipTests package
+          else
+            echo "no build system detected"; exit 1
+          fi
+
+      - name: Find produced jar
+        id: find
+        run: |
+          set -ex
+          if [ -n "${ARTIFACT_GLOB:-}" ]; then
+            JAR=$(ls -1 ${ARTIFACT_GLOB} 2>/dev/null | head -1)
+          else
+            JAR=$(find . -name '*.jar' \
+                    -not -path './.git/*' \
+                    -not -path '*/build/tmp/*' \
+                    -not -path '*/buildSrc/*' \
+                    -not -name '*-sources.jar' \
+                    -not -name '*-javadoc.jar' \
+                    -not -name '*-api.jar' \
+                  | xargs -I{} sh -c 'echo "$(stat -c %s {} 2>/dev/null) {}"' \
+                  | sort -rn | head -1 | awk '{print $2}')
+          fi
+          [ -z "$JAR" ] && { echo "no jar produced"; exit 1; }
+          echo "jar=$JAR" >> $GITHUB_OUTPUT
+          echo "found jar: $JAR ($(stat -c %s "$JAR") bytes)"
 
       - name: Stage jar to bench host
-        if: ${{ env.skip != '1' }}
         id: stage
         run: |
           set -ex
-          JAR=$(ls _jar/*.jar 2>/dev/null | head -1)
-          [ -z "$JAR" ] && { echo "no jar in artifact"; exit 1; }
-          # Sanitise the repo name into a stable jar name on disk.
+          JAR="${{ steps.find.outputs.jar }}"
           NAME="$(basename '${{ github.repository }}' | tr / -)"
           cat "$JAR" | docker run --rm -i \
             -v /fast/plugbench:/dst -e NAME="$NAME" busybox \
@@ -115,23 +133,20 @@ jobs:
           echo "jar_name=$NAME" >> $GITHUB_OUTPUT
 
       - name: Clone plugbench-ekaii
-        if: ${{ env.skip != '1' }}
         run: git clone --depth=1 https://forgejo.ekaii.fr/exo/plugbench-ekaii.git /tmp/plugbench-ekaii
 
       - name: Run plugbench gate
-        if: ${{ env.skip != '1' }}
+        id: gate
         env:
           PLUGBENCH_KIND: plugin
           PLUGBENCH_JAR: ${{ steps.stage.outputs.jar_path }}
           PLUGBENCH_VERSION: ${{ env.SHA }}
           PLUGBENCH_REPO_DIR: ${{ github.workspace }}
           PLUGBENCH_REPO: /tmp/plugbench-ekaii
-          PR_NUMBER: ${{ steps.pr.outputs.number }}
         run: bash /tmp/plugbench-ekaii/scripts/gate.sh
-        id: gate
 
-      - name: Set commit status on the head sha
-        if: ${{ always() && env.skip != '1' }}
+      - name: Set commit status
+        if: always()
         run: |
           STATE=success
           [ "${{ steps.gate.outcome }}" = "failure" ] && STATE=failure
