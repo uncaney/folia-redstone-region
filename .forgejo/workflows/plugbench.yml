@@ -69,20 +69,10 @@ jobs:
             sh -c "mkdir -p /dst/\$DIR_REL && chmod -R 0755 /dst/\$DIR_REL"
 
       - name: Install JDK 25
-        run: |
-          set -ex
-          { if [ ! -d /opt/jdk ]; then
-              curl -fsSL https://download.bell-sw.com/java/25.0.1+9/bellsoft-jdk25.0.1+9-linux-amd64.tar.gz \
-                | tar -xz -C /opt
-              ln -sf /opt/jdk-25.0.1+9 /opt/jdk
-            fi
-            /opt/jdk/bin/java -version 2>&1
-          } > /tmp/jdk-install.log 2>&1 || rc=$?
-          cat /tmp/jdk-install.log | docker run --rm -i \
-            -v /fast/plugbench:/dst -e P="${PR_REPO//\//_}/${SHA}" busybox \
-            sh -c 'mkdir -p /dst/gate-logs/$P && cat > /dst/gate-logs/$P/jdk-install.log'
-          tail -20 /tmp/jdk-install.log
-          [ "${rc:-0}" -ne 0 ] && exit "${rc:-1}" || true
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
 
       - name: Read .plugbench.toml [bench.build]
         id: cfg
@@ -122,8 +112,6 @@ jobs:
       - name: Build
         run: |
           { set -ex
-            export JAVA_HOME=/opt/jdk
-            export PATH="$JAVA_HOME/bin:$PATH"
             if [ -n "${BUILD_CMD:-}" ]; then
               bash -c "$BUILD_CMD"
             elif [ -f gradlew ]; then
