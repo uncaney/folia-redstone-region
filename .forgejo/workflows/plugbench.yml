@@ -171,19 +171,87 @@ jobs:
           PLUGBENCH_VERSION: ${{ env.SHA }}
           PLUGBENCH_REPO_DIR: ${{ github.workspace }}
           PLUGBENCH_REPO: /tmp/plugbench-ekaii
-        run: bash /tmp/plugbench-ekaii/scripts/gate.sh
+        run: |
+          set -o pipefail
+          bash /tmp/plugbench-ekaii/scripts/gate.sh | tee /tmp/gate-output.txt
+          # Persist the resolved run_id from the gate output for downstream steps.
+          RUN_ID=$(grep -oE '\[gate\] run_id=([0-9a-f-]+)' /tmp/gate-output.txt | tail -1 | awk -F= '{print $2}')
+          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+
+      - name: Stage report artifacts to runner workspace (so upload-artifact can grab them)
+        if: always() && steps.gate.outputs.run_id != ''
+        run: |
+          set -ex
+          mkdir -p ${{ github.workspace }}/_report
+          # Pull the report bundle out of /fast/plugbench (which is bind-mounted into this container)
+          cp -r /fast/plugbench/runs/${{ steps.gate.outputs.run_id }}/. ${{ github.workspace }}/_report/ || true
+          ls -la ${{ github.workspace }}/_report/
+
+      - name: Upload report bundle as workflow artifact (A)
+        if: always() && steps.gate.outputs.run_id != ''
+        uses: actions/upload-artifact@v3
+        with:
+          name: plugbench-${{ env.SHA }}
+          path: |
+            _report/report.md
+            _report/report.html
+            _report/report.json
+            _report/manifest.json
+            _report/**/events.parquet
+          if-no-files-found: warn
+
+      - name: Commit report to exo/plugbench-reports (B)
+        if: always() && steps.gate.outputs.run_id != ''
+        env:
+          REPORTS_TOKEN: ${{ secrets.PLUGBENCH_REPORTS_TOKEN || secrets.FORGEJO_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          set -ex
+          REPO_SLUG="${PR_REPO//\//_}"
+          DEST="${REPO_SLUG}/${SHA}"
+          git config --global user.email "plugbench@ekaii.fr"
+          git config --global user.name  "plugbench-gate"
+          git clone --depth=1 \
+            "https://${REPORTS_TOKEN}@forgejo.ekaii.fr/exo/plugbench-reports.git" \
+            /tmp/reports
+          mkdir -p "/tmp/reports/${DEST}"
+          for f in report.md report.html report.json manifest.json; do
+            [ -f "${{ github.workspace }}/_report/$f" ] && cp "${{ github.workspace }}/_report/$f" "/tmp/reports/${DEST}/"
+          done
+          # Index page per repo
+          INDEX="/tmp/reports/${REPO_SLUG}/README.md"
+          {
+            echo "# ${PR_REPO} — plugbench history"
+            echo
+            echo "| commit | run | status | report |"
+            echo "| --- | --- | --- | --- |"
+            for d in "/tmp/reports/${REPO_SLUG}/"*/; do
+              [ -d "$d" ] || continue
+              SHA_=$(basename "$d")
+              [ "$SHA_" = "README.md" ] && continue
+              # Pull status from report.json if present
+              STATE=$(python3 -c "import json,sys; d=json.load(open('${d}report.json')); print(d.get('run',{}).get('status','?'))" 2>/dev/null || echo '?')
+              echo "| \`${SHA_:0:8}\` | $(date -r "$d" -u +%Y-%m-%d) | $STATE | [report.md](./${SHA_}/report.md) |"
+            done | sort -k4 -r
+          } > "$INDEX"
+          cd /tmp/reports
+          git add -A
+          if git diff --staged --quiet; then
+            echo "no changes to commit"
+          else
+            git commit -m "${PR_REPO} ${SHA:0:8} (status=${{ steps.gate.outcome }})"
+            git push origin main
+          fi
 
       - name: Set commit status
         if: always()
         run: |
-          # Default to failure; only flip to success when the gate step actually
-          # ran AND succeeded. Prior-step failures (build, stage, etc.) propagate
-          # as failure so branch protection blocks the merge.
           STATE=failure
           if [ "${{ steps.gate.outcome }}" = "success" ]; then STATE=success; fi
+          REPO_SLUG="${PR_REPO//\//_}"
+          REPORT_URL="${{ github.server_url }}/exo/plugbench-reports/src/branch/main/${REPO_SLUG}/${SHA}/report.md"
           curl -sS -X POST \
             -H "Authorization: token $FORGEJO_TOKEN" \
             -H "Content-Type: application/json" \
             "${{ github.server_url }}/api/v1/repos/${{ github.repository }}/statuses/${SHA}" \
-            -d "{\"state\":\"$STATE\",\"context\":\"plugbench/bench\",\"target_url\":\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\",\"description\":\"plugbench gate $STATE\"}" \
+            -d "{\"state\":\"$STATE\",\"context\":\"plugbench/bench\",\"target_url\":\"${REPORT_URL}\",\"description\":\"plugbench gate $STATE\"}" \
             || true
