@@ -1,0 +1,143 @@
+# plugbench gate (plugin) — drop-in workflow.
+# Triggers AFTER the repo's existing build.yml completes successfully (via
+# workflow_run), downloads the produced jar, runs plugbench against it, sets a
+# commit status ("plugbench/bench: success|failure"). Branch protection on main
+# requires that status to be green to merge.
+#
+# Customise behaviour by adding `.plugbench.toml` to repo root:
+#
+#     [bench]
+#     flavor          = "luminol"
+#     flavor_version  = "26.1.2-ekaii"
+#     scenarios       = ["idle", "chunkstorm"]
+#     depth           = "L2"
+#     repeats         = 2
+#     warmup_min      = 2
+#     duration_min    = 5
+#
+#     [bench.deps]
+#     plugins = ["mapacheelib"]
+#
+# Defaults: paper:1.21.4-build-228, idle+chunkstorm, L2, 2 reps, 2/5 warmup/dur.
+name: plugbench
+on:
+  # Run after the existing build.yml succeeds — gives us the produced jar.
+  workflow_run:
+    workflows: ["build"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      jar_url:
+        description: "Direct URL to a jar to bench (skips the workflow_run path)"
+        required: false
+
+jobs:
+  bench:
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    container: { image: node:20-bookworm }
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN || secrets.GITHUB_TOKEN }}
+      PR_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Resolve PR number (if any)
+        id: pr
+        run: |
+          PR_NUM=""
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            # The triggering workflow_run carries pull_requests metadata.
+            PR_NUM=$(echo '${{ toJson(github.event.workflow_run.pull_requests) }}' \
+              | python3 -c "import json,sys; d=json.load(sys.stdin); print(d[0]['number']) if d else None" 2>/dev/null || true)
+          fi
+          echo "number=$PR_NUM" >> $GITHUB_OUTPUT
+
+      - name: Install docker CLI + curl + jq
+        run: |
+          if ! command -v docker >/dev/null 2>&1; then
+            apt-get update -qq
+            apt-get install -y --no-install-recommends docker.io curl jq
+          fi
+          docker --version
+
+      - name: Download jar artifact from triggering build
+        if: ${{ github.event_name == 'workflow_run' }}
+        run: |
+          set -ex
+          # The triggering run's artifacts are reachable via the actions API.
+          RUN_ID="${{ github.event.workflow_run.id }}"
+          mkdir -p _jar
+          # List artifacts on the triggering run.
+          ARTS=$(curl -sS -H "Authorization: token $FORGEJO_TOKEN" \
+            "${{ github.server_url }}/api/v1/repos/${{ github.repository }}/actions/runs/${RUN_ID}/artifacts" || true)
+          # Forgejo's API returns a JSON list; each artifact has an archive_download_url.
+          # Try common artifact names first, fall back to the first jar found.
+          for name in plugin-jar engine-jar plugin server-jar jar; do
+            URL=$(echo "$ARTS" | jq -r ".artifacts[]? | select(.name==\"$name\") | .archive_download_url" 2>/dev/null | head -1)
+            [ -n "$URL" ] && [ "$URL" != "null" ] && break
+          done
+          # Fallback: first artifact whose name contains "jar"
+          if [ -z "${URL:-}" ] || [ "$URL" = "null" ]; then
+            URL=$(echo "$ARTS" | jq -r '.artifacts[]? | select(.name|test("jar";"i")) | .archive_download_url' 2>/dev/null | head -1)
+          fi
+          if [ -z "${URL:-}" ] || [ "$URL" = "null" ]; then
+            echo "no artifact found on run $RUN_ID — skipping bench"
+            echo "skip=1" >> $GITHUB_ENV
+            exit 0
+          fi
+          curl -fsSL -H "Authorization: token $FORGEJO_TOKEN" -o /tmp/art.zip "$URL"
+          (cd _jar && unzip -q /tmp/art.zip)
+          ls -la _jar/
+
+      - name: Download jar from URL (manual dispatch)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.jar_url != '' }}
+        run: |
+          mkdir -p _jar
+          curl -fsSL -o "_jar/$(basename '${{ inputs.jar_url }}')" "${{ inputs.jar_url }}"
+
+      - name: Stage jar to bench host
+        if: ${{ env.skip != '1' }}
+        id: stage
+        run: |
+          set -ex
+          JAR=$(ls _jar/*.jar 2>/dev/null | head -1)
+          [ -z "$JAR" ] && { echo "no jar in artifact"; exit 1; }
+          # Sanitise the repo name into a stable jar name on disk.
+          NAME="$(basename '${{ github.repository }}' | tr / -)"
+          cat "$JAR" | docker run --rm -i \
+            -v /fast/plugbench:/dst -e NAME="$NAME" busybox \
+            sh -c 'mkdir -p /dst/jars/plugins && cat > /dst/jars/plugins/$NAME.jar && chmod 0644 /dst/jars/plugins/$NAME.jar'
+          echo "jar_path=/fast/plugbench/jars/plugins/${NAME}.jar" >> $GITHUB_OUTPUT
+          echo "jar_name=$NAME" >> $GITHUB_OUTPUT
+
+      - name: Clone plugbench-ekaii
+        if: ${{ env.skip != '1' }}
+        run: git clone --depth=1 https://forgejo.ekaii.fr/exo/plugbench-ekaii.git /tmp/plugbench-ekaii
+
+      - name: Run plugbench gate
+        if: ${{ env.skip != '1' }}
+        env:
+          PLUGBENCH_KIND: plugin
+          PLUGBENCH_JAR: ${{ steps.stage.outputs.jar_path }}
+          PLUGBENCH_VERSION: ${{ env.SHA }}
+          PLUGBENCH_REPO_DIR: ${{ github.workspace }}
+          PLUGBENCH_REPO: /tmp/plugbench-ekaii
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: bash /tmp/plugbench-ekaii/scripts/gate.sh
+        id: gate
+
+      - name: Set commit status on the head sha
+        if: ${{ always() && env.skip != '1' }}
+        run: |
+          STATE=success
+          [ "${{ steps.gate.outcome }}" = "failure" ] && STATE=failure
+          curl -sS -X POST \
+            -H "Authorization: token $FORGEJO_TOKEN" \
+            -H "Content-Type: application/json" \
+            "${{ github.server_url }}/api/v1/repos/${{ github.repository }}/statuses/${SHA}" \
+            -d "{\"state\":\"$STATE\",\"context\":\"plugbench/bench\",\"target_url\":\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\",\"description\":\"plugbench gate $STATE\"}" \
+            || true
