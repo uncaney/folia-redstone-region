@@ -1,0 +1,10 @@
+# folia-redstone-region — per-chunk vanilla/AC dispatch on Folia 1.21.11.
+# Tick-budget sensitive — redstone scenario is the headline test.
+[bench]
+flavor          = "folia"
+flavor_version  = "1.21.4-build-50"
+scenarios       = ["idle", "redstone"]
+depth           = "L2"
+repeats         = 3
+warmup_min      = 2
+duration_min    = 5
