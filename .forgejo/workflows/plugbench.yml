@@ -41,6 +41,11 @@ jobs:
         # The runner's /data/config.yml whitelists both via `valid_volumes`.
         - /var/run/docker.sock:/var/run/docker.sock
         - /fast/plugbench:/fast/plugbench
+    defaults:
+      run:
+        # forgejo-runner defaults to /bin/sh (dash); ${var//x/y} bash syntax
+        # would otherwise hit "Bad substitution".
+        shell: bash
     env:
       SHA: ${{ github.sha }}
       FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN || secrets.GITHUB_TOKEN }}
@@ -186,8 +191,11 @@ jobs:
       - name: Set commit status
         if: always()
         run: |
-          STATE=success
-          [ "${{ steps.gate.outcome }}" = "failure" ] && STATE=failure
+          # Default to failure; only flip to success when the gate step actually
+          # ran AND succeeded. Prior-step failures (build, stage, etc.) propagate
+          # as failure so branch protection blocks the merge.
+          STATE=failure
+          if [ "${{ steps.gate.outcome }}" = "success" ]; then STATE=success; fi
           curl -sS -X POST \
             -H "Authorization: token $FORGEJO_TOKEN" \
             -H "Content-Type: application/json" \
