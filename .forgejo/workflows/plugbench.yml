@@ -47,14 +47,15 @@ jobs:
         # Ensure the log dir exists on the bench host so EVERY subsequent step can
         # tee its output there. Forgejo's task-log API is unreliable on this
         # instance, so we publish our own logs and inspect via SSH.
+        # Note: paths inside the sibling busybox refer to /dst (the bind mount).
         run: |
           set -ex
           if ! command -v docker >/dev/null 2>&1; then
             apt-get update -qq
             apt-get install -y --no-install-recommends docker.io curl jq python3
           fi
-          docker run --rm -v /fast/plugbench:/dst busybox \
-            sh -c "mkdir -p /dst/gate-logs/${PR_REPO//\//_}/${SHA} && chmod -R 0755 /dst/gate-logs"
+          docker run --rm -v /fast/plugbench:/dst -e DIR_REL="gate-logs/${PR_REPO//\//_}/${SHA}" busybox \
+            sh -c "mkdir -p /dst/\$DIR_REL && chmod -R 0755 /dst/\$DIR_REL"
 
       - name: Install JDK 25
         run: |
@@ -68,7 +69,7 @@ jobs:
           } > /tmp/jdk-install.log 2>&1 || rc=$?
           cat /tmp/jdk-install.log | docker run --rm -i \
             -v /fast/plugbench:/dst -e P="${PR_REPO//\//_}/${SHA}" busybox \
-            sh -c 'cat > /dst/gate-logs/$P/jdk-install.log'
+            sh -c 'mkdir -p /dst/gate-logs/$P && cat > /dst/gate-logs/$P/jdk-install.log'
           tail -20 /tmp/jdk-install.log
           [ "${rc:-0}" -ne 0 ] && exit "${rc:-1}" || true
 
@@ -91,7 +92,7 @@ jobs:
             cat /tmp/buildcfg.env >> $GITHUB_ENV
             cat /tmp/buildcfg.env | docker run --rm -i \
               -v /fast/plugbench:/dst -e P="${PR_REPO//\//_}/${SHA}" busybox \
-              sh -c 'cat > /dst/gate-logs/$P/buildcfg.env'
+              sh -c 'mkdir -p /dst/gate-logs/$P && cat > /dst/gate-logs/$P/buildcfg.env'
           fi
 
       - name: Prebuild (download vendor deps if any)
@@ -103,7 +104,7 @@ jobs:
           } > /tmp/prebuild.log 2>&1 || rc=$?
           cat /tmp/prebuild.log | docker run --rm -i \
             -v /fast/plugbench:/dst -e P="${PR_REPO//\//_}/${SHA}" busybox \
-            sh -c 'cat > /dst/gate-logs/$P/prebuild.log'
+            sh -c 'mkdir -p /dst/gate-logs/$P && cat > /dst/gate-logs/$P/prebuild.log'
           tail -30 /tmp/prebuild.log
           [ "${rc:-0}" -ne 0 ] && exit "${rc:-1}" || true
 
@@ -126,7 +127,7 @@ jobs:
           } > /tmp/build.log 2>&1 || rc=$?
           cat /tmp/build.log | docker run --rm -i \
             -v /fast/plugbench:/dst -e P="${PR_REPO//\//_}/${SHA}" busybox \
-            sh -c 'cat > /dst/gate-logs/$P/build.log'
+            sh -c 'mkdir -p /dst/gate-logs/$P && cat > /dst/gate-logs/$P/build.log'
           tail -80 /tmp/build.log
           [ "${rc:-0}" -ne 0 ] && exit "${rc:-1}" || true
 
