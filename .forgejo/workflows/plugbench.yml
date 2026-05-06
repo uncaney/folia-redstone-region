@@ -113,6 +113,8 @@ jobs:
             fi
           fi
           echo "[Build] PREBUILD=$(printf %s "$PREBUILD" | wc -c)B BUILD_CMD=$(printf %s "$BUILD_CMD" | wc -c)B ARTIFACT_GLOB=$ARTIFACT_GLOB"
+          echo "[Build] entering inner block"
+          set +u  # tolerate optional vars in inner block
 
           {
             set -ex
@@ -153,14 +155,14 @@ jobs:
             fi
             [ -z "$JAR" ] && { echo "no jar produced — ls build/libs:"; ls -la build/libs target 2>&1; exit 1; }
             echo "produced jar: $JAR ($(stat -c %s "$JAR") bytes)"
+            echo "[Build] inner block end"
             echo "jar=$JAR" >> $GITHUB_OUTPUT
-          } > /tmp/build.log 2>&1
-          rc=$?
+          } 2>&1 | tee /tmp/build.log
+          rc=${PIPESTATUS[0]}
+          echo "[Build] block exited rc=$rc"
           cat /tmp/build.log | docker run --rm -i \
             -v /fast/plugbench:/dst -e P="${PR_REPO//\//_}/${SHA}" busybox \
-            sh -c 'mkdir -p /dst/gate-logs/$P && cat > /dst/gate-logs/$P/build.log'
-          echo "=== build.log tail ==="
-          tail -80 /tmp/build.log
+            sh -c 'mkdir -p /dst/gate-logs/$P && cat > /dst/gate-logs/$P/build.log' || true
           exit $rc
 
       - name: Stage jar to bench host
