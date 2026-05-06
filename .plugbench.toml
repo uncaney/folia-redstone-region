@@ -1,11 +1,13 @@
 # folia-redstone-region — per-chunk vanilla/AC dispatch on Folia 1.21.11.
-# Tick-budget sensitive — redstone scenario is the headline test.
-# redstone re-enabled — orchestrator hardened (2x mem_limit, settle pause,
-# compose-ps retry); see runner.py + chunkstorm.js commit history.
+# Tick-budget sensitive — was meant to use the redstone scenario as headline
+# test, but agent/scenario/redstone.js depends on mineflayer which ECONNRESETs
+# against Folia/Luminol 26.x (newer than mineflayer's protocol cap).
+# Until redstone.js gets ported to RCON `/setblock` (no-bot), use chunkstorm
+# (chunky+RCON, folia-supported) for load coverage instead.
 [bench]
 flavor          = "folia"
 flavor_version  = "1.21.11-build-6"
-scenarios       = ["idle", "redstone"]
+scenarios       = ["idle", "chunkstorm"]
 depth           = "L2"
 repeats         = 2
 warmup_min      = 2
