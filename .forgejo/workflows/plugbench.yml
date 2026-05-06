@@ -83,12 +83,18 @@ jobs:
         # $GITHUB_ENV mid-flight. Reads .plugbench.toml directly here. All
         # output streams to /tmp/build.log + a sibling-published gate-log.
         id: find
+        # Force errexit OFF — act_runner's default `bash` mode includes -e,
+        # which made any pipeline failure (e.g., gradle returning non-zero
+        # legitimately, or our inner build block) kill the entire step before
+        # we could capture rc and surface a useful error.
+        shell: bash {0}
         run: |
           # Defensive: log start to runner stdout immediately so silent crashes
           # produce *some* signal in the task log.
           echo "[Build] step entered $(date -u +%H:%M:%S)"
           which python3 || { echo "[Build] FATAL: python3 missing"; exit 1; }
-          set -uo pipefail
+          set +e
+          set -o pipefail
           PREBUILD="" ; BUILD_CMD="" ; ARTIFACT_GLOB=""
           if [ -f .plugbench.toml ]; then
             echo "[Build] reading .plugbench.toml"
@@ -113,6 +119,9 @@ jobs:
             fi
           fi
           echo "[Build] PREBUILD=$(printf %s "$PREBUILD" | wc -c)B BUILD_CMD=$(printf %s "$BUILD_CMD" | wc -c)B ARTIFACT_GLOB=$ARTIFACT_GLOB"
+          echo "[Build] === PREBUILD content ==="
+          printf '%s\n' "$PREBUILD" || true
+          echo "[Build] === END PREBUILD ==="
           echo "[Build] entering inner block"
           set +u  # tolerate optional vars in inner block
 
