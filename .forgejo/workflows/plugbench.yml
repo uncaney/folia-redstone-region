@@ -143,21 +143,34 @@ jobs:
           [ -n "$PREBUILD" ] && printf '%s\n' "$PREBUILD" > "$PREBUILD_SH"
           [ -n "$BUILD_CMD" ] && printf '%s\n' "$BUILD_CMD" > "$BUILD_SH"
 
+          # 3x retry helper — gradle plugin portal + maven central + papermc
+          # repo all flake under concurrent fetch from 8 parallel jobs.
+          retry() {
+            local n=0 rc
+            until "$@"; do
+              rc=$?
+              n=$((n+1))
+              if [ $n -ge 3 ]; then return $rc; fi
+              echo "[retry] attempt $n failed (rc=$rc) — sleep 15s then retry: $*"
+              sleep 15
+            done
+          }
+
           {
             set -ex
             if [ -s "$PREBUILD_SH" ]; then
               echo "## PREBUILD"
-              bash -ex "$PREBUILD_SH"
+              retry bash -ex "$PREBUILD_SH"
             fi
             echo "## BUILD"
             if [ -s "$BUILD_SH" ]; then
-              bash -ex "$BUILD_SH"
+              retry bash -ex "$BUILD_SH"
             elif [ -f gradlew ]; then
               chmod +x gradlew
-              ./gradlew --no-daemon clean build
+              retry ./gradlew --no-daemon clean build
             elif [ -f pom.xml ]; then
               apt-get install -y --no-install-recommends maven
-              mvn -B -DskipTests package
+              retry mvn -B -DskipTests package
             else
               echo "no build system detected"; exit 1
             fi
