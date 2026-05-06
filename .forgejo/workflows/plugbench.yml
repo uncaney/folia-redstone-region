@@ -68,6 +68,15 @@ jobs:
           docker run --rm -v /fast/plugbench:/dst -e DIR_REL="gate-logs/${PR_REPO//\//_}/${SHA}" busybox \
             sh -c "mkdir -p /dst/\$DIR_REL && chmod -R 0755 /dst/\$DIR_REL"
 
+      # Install BOTH JDK 21 (paperweight needs it for some sub-modules; EH/DH
+      # gradle plugins use languageVersion=21) and JDK 25 (default toolchain).
+      # Plugin gradlew picks via auto-detect.
+      - name: Install JDK 21 (toolchain)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: ''
       - name: Install JDK 25
         uses: actions/setup-java@v4
         with:
