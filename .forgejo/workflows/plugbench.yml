@@ -116,15 +116,22 @@ jobs:
           echo "[Build] entering inner block"
           set +u  # tolerate optional vars in inner block
 
+          # Write multi-line scripts to tempfiles instead of `bash -c "$VAR"`
+          # which mishandles embedded newlines on some bash builds.
+          PREBUILD_SH=$(mktemp)
+          BUILD_SH=$(mktemp)
+          [ -n "$PREBUILD" ] && printf '%s\n' "$PREBUILD" > "$PREBUILD_SH"
+          [ -n "$BUILD_CMD" ] && printf '%s\n' "$BUILD_CMD" > "$BUILD_SH"
+
           {
             set -ex
-            if [ -n "$PREBUILD" ]; then
+            if [ -s "$PREBUILD_SH" ]; then
               echo "## PREBUILD"
-              bash -ex -c "$PREBUILD"
+              bash -ex "$PREBUILD_SH"
             fi
             echo "## BUILD"
-            if [ -n "$BUILD_CMD" ]; then
-              bash -ex -c "$BUILD_CMD"
+            if [ -s "$BUILD_SH" ]; then
+              bash -ex "$BUILD_SH"
             elif [ -f gradlew ]; then
               chmod +x gradlew
               ./gradlew --no-daemon clean build
