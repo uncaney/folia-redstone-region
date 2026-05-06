@@ -68,20 +68,22 @@ jobs:
           docker run --rm -v /fast/plugbench:/dst -e DIR_REL="gate-logs/${PR_REPO//\//_}/${SHA}" busybox \
             sh -c "mkdir -p /dst/\$DIR_REL && chmod -R 0755 /dst/\$DIR_REL"
 
-      # Install BOTH JDK 21 (paperweight needs it for some sub-modules; EH/DH
-      # gradle plugins use languageVersion=21) and JDK 25 (default toolchain).
-      # Plugin gradlew picks via auto-detect.
-      - name: Install JDK 21 (toolchain)
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-          cache: ''
-      - name: Install JDK 25
+      # Install JDK 25 first (toolchain auto-detect finds it), then JDK 21 LAST
+      # so JAVA_HOME points at 21. Critical because:
+      #   - DH uses gradle 8.14.3 which doesn't support Java 25 class files
+      #   - EH paperweight requires languageVersion=21 toolchain
+      #   - Plugins targeting older API still build fine on JDK 21.
+      - name: Install JDK 25 (toolchain)
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '25'
+          cache: ''
+      - name: Install JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
           # cache: '' disables the post-step gradle/maven cache hash which
           # was hanging in the EH job (long enough for act-runner to time out).
           # Each gate run starts fresh anyway.
