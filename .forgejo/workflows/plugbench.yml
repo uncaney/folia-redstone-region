@@ -84,10 +84,15 @@ jobs:
         # output streams to /tmp/build.log + a sibling-published gate-log.
         id: find
         run: |
+          # Defensive: log start to runner stdout immediately so silent crashes
+          # produce *some* signal in the task log.
+          echo "[Build] step entered $(date -u +%H:%M:%S)"
+          which python3 || { echo "[Build] FATAL: python3 missing"; exit 1; }
           set -uo pipefail
           PREBUILD="" ; BUILD_CMD="" ; ARTIFACT_GLOB=""
           if [ -f .plugbench.toml ]; then
-            eval "$(python3 - <<'PYEOF'
+            echo "[Build] reading .plugbench.toml"
+            EVAL_OUT=$(python3 - <<'PYEOF' 2>&1 || echo "PY_ERROR")
           import tomllib
           from pathlib import Path
           b = (tomllib.loads(Path(".plugbench.toml").read_text()).get("bench", {}) or {}).get("build", {}) or {}
@@ -100,8 +105,14 @@ jobs:
           emit("BUILD_CMD", b.get("command", ""))
           emit("ARTIFACT_GLOB", b.get("artifact_glob", ""))
           PYEOF
-          )"
+            echo "[Build] python emitted $(printf %s "$EVAL_OUT" | wc -c) bytes"
+            if echo "$EVAL_OUT" | grep -q PY_ERROR; then
+              echo "[Build] python parse failed, ignoring [bench.build] from toml"
+            else
+              eval "$EVAL_OUT" || echo "[Build] eval failed, continuing with empty build vars"
+            fi
           fi
+          echo "[Build] PREBUILD=$(printf %s "$PREBUILD" | wc -c)B BUILD_CMD=$(printf %s "$BUILD_CMD" | wc -c)B ARTIFACT_GLOB=$ARTIFACT_GLOB"
 
           {
             set -ex
