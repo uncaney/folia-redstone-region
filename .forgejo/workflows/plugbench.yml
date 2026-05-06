@@ -68,22 +68,22 @@ jobs:
           docker run --rm -v /fast/plugbench:/dst -e DIR_REL="gate-logs/${PR_REPO//\//_}/${SHA}" busybox \
             sh -c "mkdir -p /dst/\$DIR_REL && chmod -R 0755 /dst/\$DIR_REL"
 
-      # Install JDK 25 first (toolchain auto-detect finds it), then JDK 21 LAST
-      # so JAVA_HOME points at 21. Critical because:
-      #   - DH uses gradle 8.14.3 which doesn't support Java 25 class files
-      #   - EH paperweight requires languageVersion=21 toolchain
-      #   - Plugins targeting older API still build fine on JDK 21.
-      - name: Install JDK 25 (toolchain)
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '25'
-          cache: ''
+      # Install BOTH JDKs. JAVA_HOME ends up at JDK 25 (last installed) which
+      # is needed for coreprotect's paper-api 26.1.2 (Java 25 class files).
+      # Repos that need JDK 21 (DH gradle 8.x, EH paperweight) can override
+      # via .plugbench.toml [bench.build].command with JAVA_HOME=$JAVA_HOME_X64.
+      # The setup-java actions export JAVA_HOME_<ver>_X64 env vars per install.
       - name: Install JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
+          cache: ''
+      - name: Install JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
           # cache: '' disables the post-step gradle/maven cache hash which
           # was hanging in the EH job (long enough for act-runner to time out).
           # Each gate run starts fresh anyway.
