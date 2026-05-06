@@ -73,6 +73,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '25'
+          # cache: '' disables the post-step gradle/maven cache hash which
+          # was hanging in the EH job (long enough for act-runner to time out).
+          # Each gate run starts fresh anyway.
+          cache: ''
 
       - name: Build (prebuild + main + jar discovery)
         # Combined into one step so empty config strings don't leak through
