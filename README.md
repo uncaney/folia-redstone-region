@@ -4,7 +4,7 @@
 [![codeql](https://github.com/uncaney/folia-redstone-region/actions/workflows/codeql.yml/badge.svg)](https://github.com/uncaney/folia-redstone-region/actions/workflows/codeql.yml)
 [![bstats](https://img.shields.io/badge/bStats-31033-blue)](https://bstats.org/plugin/bukkit/redstone-region/31033)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![mc](https://img.shields.io/badge/Minecraft-1.21.11-brightgreen)](#requirements)
+[![mc](https://img.shields.io/badge/Minecraft-26.2-brightgreen)](#requirements)
 
 > **Per-chunk redstone-engine dispatch for Folia.** Default chunks tick
 > vanilla; opt chunks into Alternate Current, Eigencraft, or fully
@@ -146,9 +146,11 @@ Full reference: [`docs/COMMANDS.md`](docs/COMMANDS.md).
 
 ## Requirements
 
-- **Folia 1.21.11** (build #6 or newer; Luminol 1.21.11 and other
-  Folia forks tested working)
-- **Java 21+**
+- **MC 26.2**: Folia 26.2 (`ver/26.2.x`), Paper 26.2 (build 62+) and
+  Purpur 26.2 boot-tested green — grab `RedstoneRegions-0.2.3+26.2.jar`.
+  Luminol/Lophine 26.2 forks tested working. Requires **Java 25+**.
+- **MC 1.21.11**: Folia build #6+ (Luminol 1.21.11 and other Folia
+  forks tested working) — use `RedstoneRegions-0.2.2.jar`, Java 21+.
 - Optional integrations:
   - **BlueMap** 5.16+ (chunk overlay)
   - **PlaceholderAPI** 2.11.7+ (placeholders)

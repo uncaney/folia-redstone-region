@@ -3,15 +3,15 @@ plugins {
     java
 }
 
-// Compile against the Luminol 26.1.2 server jar directly. paperweight-userdev
-// 2.0.0-beta.21 doesn't support the new paperclip format yet, and Folia
-// officiel hasn't published a 26.x dev-bundle. The Luminol server jar bundles
-// every NMS class we need (mojmap), the Bukkit/Paper API, and the Folia
+// Compile against the Lophine (Luminol lineage) 26.2 server jar directly.
+// paperweight-userdev doesn't support the new paperclip format yet, and Folia
+// officiel hasn't published a 26.x dev-bundle. The server jar bundles every
+// NMS class we need (mojmap), the Bukkit/Paper API, and the Folia
 // threadedregions API — so a single compileOnly file dependency does the job.
 //
-// To regenerate: clone https://github.com/LuminolMC/Luminol -b dev/26.1.x and
-// run ./gradlew :luminol-server:jar. Output at
-// luminol-server/build/libs/luminol-server-*-SNAPSHOT.jar — copy it to
+// To regenerate: clone https://github.com/LuminolMC/Lophine (or Folia
+// ver/26.2.x) and run ./gradlew :lophine-server:jar. Output at
+// lophine-server/build/libs/lophine-server-*-SNAPSHOT.jar — copy it to
 // vendor/ in this project.
 
 repositories {
@@ -22,15 +22,15 @@ repositories {
 
 dependencies {
     // Luminol's full server classpath (NMS mojmap + Folia threadedregions impl).
-    compileOnly(files("../vendor/luminol-server-26.1.2.jar"))
+    compileOnly(files("../vendor/lophine-server-26.2.jar"))
     // Luminol's API jar (Bukkit + Paper API + Folia scheduler interfaces).
-    compileOnly(files("../vendor/luminol-api-26.1.2.jar"))
+    compileOnly(files("../vendor/lophine-api-26.2.jar"))
     // Brigadier (commands) — bundled with Paper at runtime.
     compileOnly("com.mojang:brigadier:1.3.10")
     // Adventure (chat components) — bundled with Paper at runtime.
-    compileOnly("net.kyori:adventure-api:4.26.1")
-    compileOnly("net.kyori:adventure-text-serializer-legacy:4.26.1")
-    compileOnly("net.kyori:adventure-text-serializer-plain:4.26.1")
+    compileOnly("net.kyori:adventure-api:5.2.0")
+    compileOnly("net.kyori:adventure-text-serializer-legacy:5.2.0")
+    compileOnly("net.kyori:adventure-text-serializer-plain:5.2.0")
     // Transitively referenced in luminol-api type annotations
     compileOnly("com.google.guava:guava:33.5.0-jre")
     compileOnly("com.mojang:datafixerupper:9.0.19")
