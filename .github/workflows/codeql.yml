@@ -35,10 +35,10 @@ jobs:
       - name: Fetch Luminol compile-only jars
         run: |
           mkdir -p vendor
-          curl -fsSL -o vendor/luminol-server-26.1.2.jar \
-            https://forgejo.ekaii.fr/exo/luminol-ekaii/releases/download/v26.1.2-ekaii-0.1.0/luminol-server-26.1.2.jar
-          curl -fsSL -o vendor/luminol-api-26.1.2.jar \
-            https://forgejo.ekaii.fr/exo/luminol-ekaii/releases/download/v26.1.2-ekaii-0.1.0/luminol-api-26.1.2.jar
+          curl -fsSL -o vendor/luminol-server-26.2.jar \
+            https://forgejo.ekaii.fr/exo/luminol-ekaii/releases/download/v26.2-ekaii-0.2.0/luminol-server-26.2.jar
+          curl -fsSL -o vendor/luminol-api-26.2.jar \
+            https://forgejo.ekaii.fr/exo/luminol-ekaii/releases/download/v26.2-ekaii-0.2.0/luminol-api-26.2.jar
 
       - name: Build
         run: |
